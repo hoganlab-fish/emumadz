@@ -1,5 +1,5 @@
-Whole genome sequencing pipeline
-================================
+Quickstart
+==========
 
 .. whole_genome_sequencing documentation master file, created by
    sphinx-quickstart on Mon Jun 30 12:23:50 2025.
@@ -22,20 +22,46 @@ Code in this repository is provided under a `MIT license`_. This documentation i
 
 .. _ben.hogan@petermac.org: mailto:ben.hogan@petermac.org
 
-Contains the documentation for our custom zebrafish whole genome sequencing pipeline.
 
-.. toctree::
-   :maxdepth: 3
-   :caption: Contents:
+Usage
+-----
 
-   intro
-   install
-   quickstart
+1. Whole zebrafish genome assembly
+++++++++++++++++++++++++++++++++++
 
 
-Indices and tables
-==================
+2. Variant calling
+++++++++++++++++++
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+
+3. Generate homozygosity peaks for visualisation
+++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+4. Quantify SNP impact
+++++++++++++++++++++++
+
+
+5. Identify strict candidate SNPs
++++++++++++++++++++++++++++++++++
+
+
+6. Filter out predicted high impact SNPs
+++++++++++++++++++++++++++++++++++++++++
+
+
+7. Filter out only SNPs (excluding CNV, INDELS, etc)
+++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.. raw:: html
+
+   <details>
+   <summary><a>Example hyperparameter.json file</a></summary>
+
+.. code-block:: shell
+
+    echo TEST
+
+.. raw:: html
+
+   </details>
