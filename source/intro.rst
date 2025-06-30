@@ -22,13 +22,13 @@ Highlights
 ----------
 
 We provide a pipeline which:
-- Performs whole zebrafish genome assembly
-- Variant calling
-- Generate homozygosity peaks for visualisation
-- Quantify SNP impact
-- Identify strict candidate SNPs
-- Filter out high impact SNPs
-- Filter out only SNPs
+1. Performs whole zebrafish genome assembly
+2. Variant calling
+3. Generates homozygosity peaks for visualisation
+4. Predicts the impact of identified SNPs
+5. Identify strict candidate SNPs
+6. Filter out predicted high impact SNPs
+7. Filter out only SNPs (excluding CNV, INDELS, etc)
 
 *put a workflow figure here*
 
