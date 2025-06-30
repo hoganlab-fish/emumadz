@@ -26,6 +26,13 @@ Code in this repository is provided under a `MIT license`_. This documentation i
 Usage
 -----
 
+0. High-level automated approach
+++++++++++++++++++++++++++++++++
+
+`A nextflow pipeline developed by the Peter MacCallum Cancer Centre Bioinformatics Core is also available.`_ This ingests raw `fastq` files as input, performs alignments to generate `bam` files, and performs variant calling to generate `vcf` files. Note that the paths are hardcoded at time of writing. Using this pipeline incorporates all steps below.
+
+.. _https://github.com/PMCC-BioinformaticsCore/zebrafish_postprocess/tree/main: https://github.com/PMCC-BioinformaticsCore/zebrafish_postprocess/tree/main
+
 1. Whole zebrafish genome assembly
 ++++++++++++++++++++++++++++++++++
 
