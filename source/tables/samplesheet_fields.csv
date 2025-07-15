@@ -1,0 +1,15 @@
+Field,Description
+Sample_Identity,Unique identifier for the sample
+Sample_Identity_Intermediate,Intermediate sample identifier is required since a module silently truncates file names
+Fastq_File,Path to the raw FASTQ/.gz file
+Alignment_File,Path to the aligned BAM file
+VCF_Original,Path to the original VCF file from GATK variant calling
+VCF_Merged,Path to the merged VCF file per chromosome
+VCF_ChrFixed,Path to the VCF file with correctly renamed chromosomes
+VCF_Annotated,Path to the annotated VCF file post-SNPEff run
+VCF_Candidates,Path to the VCF file containing strict candidate information
+Vis_Gaps_NBases*,Number of bases in gaps (bedgraph + tdf for visualisation)
+Vis_NoGaps_NBases*,Number of bases not in gaps (bedgraph + tdf for visualisation)
+Vis_Gaps_NSnps*,Number of SNPs in gaps (bedgraph + tdf for visualisation)
+Vis_NoGaps_NSnps*,Number of SNPs not in gaps (bedgraph + tdf for visualisation)
+Metadata_Json,Path to the JSON file containing metadata for visualisation

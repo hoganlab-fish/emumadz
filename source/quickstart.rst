@@ -26,12 +26,34 @@ Code in this repository is provided under a `MIT license`_. This documentation i
 Usage
 -----
 
-0. High-level automated approach
-++++++++++++++++++++++++++++++++
+High-level automated approach
++++++++++++++++++++++++++++++
 
 `A nextflow pipeline developed by the Peter MacCallum Cancer Centre Bioinformatics Core is also available.`_ This ingests raw `fastq` files as input, performs alignments to generate `bam` files, and performs variant calling to generate `vcf` files. Note that the paths are hardcoded at time of writing. Using this pipeline incorporates all steps below.
 
-.. _https://github.com/PMCC-BioinformaticsCore/zebrafish_postprocess/tree/main: https://github.com/PMCC-BioinformaticsCore/zebrafish_postprocess/tree/main
+.. _A nextflow pipeline developed by the Peter MacCallum Cancer Centre Bioinformatics Core is also available.: https://github.com/PMCC-BioinformaticsCore/zebrafish_postprocess/tree/main: https://github.com/PMCC-BioinformaticsCore/zebrafish_postprocess/tree/main
+
+0. Data setup
++++++++++++++
+
+.. caution::
+   The original data setup was sample-centric as opposed to more conventional process-centric directory structure. In addition, code had hardcoded paths which limited file movement. This impacted all steps of analysis and reduced reproducibility. To lower the impact of the original file layout, the data directory now contains samplesheets with updated file paths to symlinks and their attributes. However, it is possible that some errors remain.
+
+The samplesheets are tab separated files with the following fields:
+
+.. Sample_Identity   Sample_Identity_Intermediate   Fastq_File  Alignment_File VCF_Original  VCF_Merged  VCF_ChrFixed  VCF_Annotated   VCF_Candidates Snzl_Gaps_NBases   Snzl_NoGaps_NBases  Snzl_Gaps_NSnps   Snzl_NoGaps_NSnps Json
+
+.. csv-table:: Samplesheet column information
+   :file: tables/samplesheet_fields.csv
+   :header-rows: 1
+
+.. warning::
+   ``Sample_Identity_Intermediate`` is required. A downstream step silently truncates file names if it exceeds a certain limit. No explanation for this behaviour was available.
+
+.. note::
+   ``Vis_`` fields should contain the file name but not the file extensions, both ``bedgraph`` and ``tdf`` files will be generated. Note that both files contain the same information but ``tdf`` is optimised for viewing with the ``IGV`` Genome Browser.
+
+Run the ``validate_samples.py`` script if unsure. This checks the validity of each file in the samplesheet per sample. *To be written*
 
 1. Whole zebrafish genome assembly
 ++++++++++++++++++++++++++++++++++
