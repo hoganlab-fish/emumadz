@@ -48,10 +48,14 @@ The samplesheets are tab separated files with the following fields:
    :header-rows: 1
 
 .. warning::
-   ``Sample_Identity_Intermediate`` is required. A downstream step silently truncates file names if it exceeds a certain limit. No explanation for this behaviour was available.
+   ``Sample_Identity_Intermediate`` is optional, the ``setup_filepaths.sh`` script will try to guess by substring matching. A downstream step silently truncates file names if it exceeds a certain limit. No explanation for this behaviour was available.
 
 .. note::
    ``Vis_`` fields should contain the file name but not the file extensions, both ``bedgraph`` and ``tdf`` files will be generated. Note that both files contain the same information but ``tdf`` is optimised for viewing with the ``IGV`` Genome Browser.
+
+.. csv-table:: Example samplesheet showing one sample
+   :file: tables/samplesheet_example.csv
+   :header-rows: 1
 
 Run the ``validate_samples.py`` script if unsure. This checks the validity of each file in the samplesheet per sample. *To be written*
 
