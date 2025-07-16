@@ -39,16 +39,16 @@ High-level automated approach
 .. caution::
    The original data setup was sample-centric as opposed to more conventional process-centric directory structure. In addition, code had hardcoded paths which limited file movement. This impacted all steps of analysis and reduced reproducibility. To lower the impact of the original file layout, the data directory now contains samplesheets with updated file paths to symlinks and their attributes. However, it is possible that some errors remain.
 
-The samplesheets are tab separated files with the following fields:
+Run ``setup_filepaths.sh`` with the required command line arguments to generate the samplesheets. The samplesheets are tab separated files with the following fields:
 
-.. Sample_Identity   Sample_Identity_Intermediate   Fastq_File  Alignment_File VCF_Original  VCF_Merged  VCF_ChrFixed  VCF_Annotated   VCF_Candidates Snzl_Gaps_NBases   Snzl_NoGaps_NBases  Snzl_Gaps_NSnps   Snzl_NoGaps_NSnps Json
+.. Sample_Identity   Fastq_File  Alignment_File VCF_Original  VCF_Merged  VCF_ChrFixed  VCF_Annotated   VCF_Candidates Snzl_Gaps_NBases   Snzl_NoGaps_NBases  Snzl_Gaps_NSnps   Snzl_NoGaps_NSnps Json
 
 .. csv-table:: Samplesheet column information
    :file: tables/samplesheet_fields.csv
    :header-rows: 1
 
 .. warning::
-   ``Sample_Identity_Intermediate`` is optional, the ``setup_filepaths.sh`` script will try to guess by substring matching. A downstream step silently truncates file names if it exceeds a certain limit. No explanation for this behaviour was available.
+   A downstream step silently truncates file names if it exceeds a certain limit. No explanation for this behaviour was available. The ``setup_filepaths.sh`` script will try to "guess" file paths by performing an arbitrary truncation and subsequent substring matching.
 
 .. note::
    ``Vis_`` fields should contain the file name but not the file extensions, both ``bedgraph`` and ``tdf`` files will be generated. Note that both files contain the same information but ``tdf`` is optimised for viewing with the ``IGV`` Genome Browser.
@@ -57,7 +57,14 @@ The samplesheets are tab separated files with the following fields:
    :file: tables/samplesheet_example.csv
    :header-rows: 1
 
-Run the ``validate_samples.py`` script if unsure. This checks the validity of each file in the samplesheet per sample. *To be written*
+Run the ``validate_samples.py`` script. This checks the validity of each file in the samplesheet per sample. This also drops the ``fastq`` column.
+
+.. code:: shell
+
+   python validate_samples.py ../data/samplesheet.tmp -o ../data/samplesheet.tsv
+
+.. caution::
+   Custom directories and/or files exist since the data passed through multiple iterations. To some extent this is accommodated in the setup and validation scripts, but make sure to double-check everything.
 
 1. Whole zebrafish genome assembly
 ++++++++++++++++++++++++++++++++++

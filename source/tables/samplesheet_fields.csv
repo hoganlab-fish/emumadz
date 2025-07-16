@@ -1,6 +1,5 @@
 Field,Description
 Sample_Identity,Unique identifier for the sample
-Sample_Identity_Intermediate,Intermediate sample identifier is required since a module silently truncates file names
 Fastq_File,Path to the raw FASTQ/.gz file
 Alignment_File,Path to the aligned BAM file
 VCF_Original,Path to the original VCF file from GATK variant calling

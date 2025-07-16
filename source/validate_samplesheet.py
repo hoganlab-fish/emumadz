@@ -8,7 +8,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Load samplesheet file into pandas DataFrame"
         )
-    parser.add_argument("samplesheet", 
+    parser.add_argument("samplesheet",
                         help="Path to the TSV samplesheet file")
     parser.add_argument("--outfile_path", "-o", default="out.tsv",
                         help="Write out the valid file paths")
