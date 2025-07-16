@@ -39,7 +39,7 @@ High-level automated approach
 .. caution::
    The original data setup was sample-centric as opposed to more conventional process-centric directory structure. In addition, code had hardcoded paths which limited file movement. This impacted all steps of analysis and reduced reproducibility. To lower the impact of the original file layout, the data directory now contains samplesheets with updated file paths to symlinks and their attributes. However, it is possible that some errors remain.
 
-Run ``extract_filepaths.sh`` with the required command line arguments to generate the samplesheets with paths to old files. The samplesheets are tab separated files with the following fields:
+Run ``1.extract_filepaths.sh`` with the required command line arguments to generate the samplesheets with paths to old files. The samplesheets are tab separated files with the following fields:
 
 .. Sample_Identity   Fastq_File  Alignment_File VCF_Original  VCF_Merged  VCF_ChrFixed  VCF_Annotated   VCF_Candidates Snzl_Gaps_NBases   Snzl_NoGaps_NBases  Snzl_Gaps_NSnps   Snzl_NoGaps_NSnps Json
 
@@ -48,7 +48,7 @@ Run ``extract_filepaths.sh`` with the required command line arguments to generat
    :header-rows: 1
 
 .. warning::
-   A downstream step silently truncates file names if it exceeds a certain limit. No explanation for this behaviour was available. The ``setup_filepaths.sh`` script will try to "guess" file paths by performing an arbitrary truncation and subsequent substring matching.
+   A downstream step silently truncates file names if it exceeds a certain limit. No explanation for this behaviour was available. The ``1.extract_filepaths.sh`` script will try to "guess" file paths by performing an arbitrary truncation and subsequent substring matching.
 
 .. note::
    ``Vis_`` fields should contain the file name but not the file extensions, both ``bedgraph`` and ``tdf`` files will be generated. Note that both files contain the same information but ``tdf`` is optimised for viewing with the ``IGV`` Genome Browser.
@@ -57,18 +57,32 @@ Run ``extract_filepaths.sh`` with the required command line arguments to generat
    :file: tables/samplesheet_example.csv
    :header-rows: 1
 
-Run the ``validate_samples.py`` script. This checks the validity of each file in the samplesheet per sample. This also drops the ``fastq`` column.
+Run the ``2.validate_samples.py`` script. This checks the validity of each file in the samplesheet per sample. This also drops the ``fastq`` column.
 
 .. code:: shell
 
-   python validate_samples.py ../data/samplesheet.tmp -o ../data/samplesheet.tsv
+   python 2.validate_samples.py ../data/samplesheet.tmp -o ../data/samplesheet.tsv
 
 .. caution::
    Custom directories and/or files exist since the data passed through multiple iterations. To some extent this is accommodated in the setup and validation scripts, but make sure to double-check everything.
 
-For the purposes of rerunning this experiment, we only want the ``bam`` alignment files since we will be recreating everything starting from the variant calling step.
+For the purposes of rerunning this experiment, we only want the ``bam`` alignment files since we will be recreating everything starting from the variant calling step. Running ``3.setup_dataset.sh`` will create the corresponding input and output directories::
 
-   VCF_Original  VCF_Merged  VCF_ChrFixed  VCF_Annotated   VCF_Candidates Snzl_Gaps_NBases   Snzl_NoGaps_NBases  Snzl_Gaps_NSnps   Snzl_NoGaps_NSnps Json
+   ../data/Alignment_File
+   ../results/Sample_Identity
+   ../results/Fastq_File
+   ../results/Alignment_File
+   ../results/VCF_Original
+   ../results/VCF_Merged
+   ../results/VCF_ChrFixed
+   ../results/VCF_Annotated
+   ../results/VCF_Candidates
+   ../results/Snzl_NoGaps_NBases
+   ../results/Snzl_NoGaps_NSnps
+   ../results/Snzl_WithGaps_NBases
+   ../results/Snzl_WithGaps_NSnps
+   ../results/Json
+   
 
 1. Whole zebrafish genome assembly
 ++++++++++++++++++++++++++++++++++

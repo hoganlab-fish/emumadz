@@ -10,7 +10,7 @@ def main():
         )
     parser.add_argument("samplesheet",
                         help="Path to the TSV samplesheet file")
-    parser.add_argument("--outfile_path", "-o", default="out.tsv",
+    parser.add_argument("--outfile_path", "-o", default="samplesheet_original.tsv",
                         help="Write out the valid file paths")
     args = parser.parse_args()
 
