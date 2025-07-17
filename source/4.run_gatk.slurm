@@ -45,7 +45,7 @@ make_gvcfs() {
         gatk --java-options "-Xmx${MEMORY}g" HaplotypeCaller \
             -R "${REF_GENOME}" \
             -I "${BAM}" \
-            -O "${VCF_GVCF_DIR}/${SAMPLE/.bam}.g.vcf.gz" \
+            -O "${VCF_GVCF_DIR}/${BAM/.bam}.g.vcf.gz" \
             -ERC GVCF
     done
 }
@@ -83,9 +83,9 @@ run_genotyping() {
 
 main() {
     make_gvcfs
-    # make_samplemap
-    # make_genomicsdb
-    # run_genotyping
+    make_samplemap
+    make_genomicsdb
+    run_genotyping
     echo "Variant calling pipeline complete. Output VCF: ${VCF_GVCF_DIR}/cohort.vcf.gz"
 }
 
