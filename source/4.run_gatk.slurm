@@ -48,10 +48,11 @@ make_gvcfs() {
     #   - compare against old pipeline
     #   - formulate as pooling ref genotypes
     for BAM in $(echo "${BAM_FILES}"); do
+        OUT_VCF=$(echo $BAM | cut -d '/' -f4)
         gatk --java-options "-Xmx${MEMORY}g" HaplotypeCaller \
             -R "${REF_GENOME}" \
             -I "${BAM}" \
-            -O "${VCF_GVCF_DIR}/${BAM/.bam}.g.vcf.gz" \
+            -O "${VCF_GVCF_DIR}/${OUT_VCF/bam}g.vcf.gz" \
             -ERC GVCF
     done
 }
