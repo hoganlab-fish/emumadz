@@ -12,3 +12,4 @@ Vis_NoGaps_NSnps*,Number of SNPs not in gaps (bedgraph + tdf for visualisation)
 Vis_WithGaps_NBases*,Number of bases in gaps (bedgraph + tdf for visualisation)
 Vis_WithGaps_NSnps*,Number of SNPs in gaps (bedgraph + tdf for visualisation)
 Metadata_Json,Path to the JSON file containing metadata for visualisation
+Sample_Short,Short identifier for the sample

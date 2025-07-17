@@ -33,8 +33,11 @@ High-level automated approach
 
 .. _A nextflow pipeline developed by the Peter MacCallum Cancer Centre Bioinformatics Core is also available.: https://github.com/PMCC-BioinformaticsCore/zebrafish_postprocess/tree/main
 
-0. Data setup
-+++++++++++++
+Data setup
+++++++++++
+
+Original data
+#############
 
 .. caution::
    The original data setup was sample-centric as opposed to more conventional process-centric directory structure. In addition, code had hardcoded paths which limited file movement. This impacted all steps of analysis and reduced reproducibility. To lower the impact of the original file layout, the data directory now contains samplesheets with updated file paths to symlinks and their attributes. However, it is possible that some errors remain.
@@ -55,7 +58,7 @@ Run ``1.extract_filepaths.sh`` with the required command line arguments to gener
    :file: tables/samplesheet_example.csv
    :header-rows: 1
 
-Run the ``2.validate_samples.py`` script. This checks the validity of each file in the samplesheet per sample. This also drops the ``fastq`` column.
+The ``2.validate_samples.py`` script checks the validity of each file in the samplesheet per sample. This also drops the ``fastq`` column. Automatically runs in ``1.extract_filepaths.sh``.
 
 .. code:: shell
 
@@ -89,15 +92,20 @@ Four samplesheet files are generated:
 - ``samplesheet.221014_A00692_0319_BHGJ7CDMXY.tsv``
 - ``samplesheet.231201_A00692_0394_231208_A00692_0396.tsv``
 
-The ``samplesheet.220701_A01221_0125_BHCCHNDMXY.tsv`` contains ``F0`` grandparent reference generation metadata. All other samplesheets contain ``F2`` generation metadata.
+The ``samplesheet.220701_A01221_0125_BHCCHNDMXY.tsv`` contains ``F0`` grandparent reference generation metadata. All other samplesheets contain ``F2`` generation metadata. ``samplesheet_original.tsv`` contains these legacy file paths.
 
-1. Whole zebrafish genome assembly
-++++++++++++++++++++++++++++++++++
+This dataset
+############
 
-*The ``seqliner`` assembly step is not covered in this documentation and starts from the called variants*
+``3.setup_dataset.sh`` copies ``bam`` alignment files over from their specified locations in ``samplesheet_original.tsv`` to ``data/Alignment_File``. A new ``samplesheet_new.tsv`` is created for the latest analysis.
 
-2. Variant calling
-++++++++++++++++++
+Whole zebrafish genome assembly
++++++++++++++++++++++++++++++++
+
+*The ``seqliner`` assembly step is not covered in this documentation. The pipeline starts from the aligned bam files*
+
+Variant calling
++++++++++++++++
 
 NCBI reference genome
 #####################
@@ -132,6 +140,17 @@ We want to find SNPs in the F2 generation which are not in the F1 generation.
 F0 pooling
 ##########
 
+Perform the variant calling for the F0, pooling samples.
+
+.. attention::
+   In the first iteration, samples were aggregated only but not pooled during variant calling.
+
+Run the variant calling with the ``4.run_gatk.sh`` script.
+
+.. attention::
+   The original iteration of the pipeline used an older variant caller ``UnifiedGenotyper``. This method is now obsolete and documentation is sparse. We use the updated ``HaplotypeCaller``, which is functionally similar and has a higher performance. `We follow the pipeline described here.`_
+
+.. _We follow the pipeline described here.: https://gatk.broadinstitute.org/hc/en-us/articles/360035535932-Germline-short-variant-discovery-SNPs-Indels
 
 
 3. Generate homozygosity peaks for visualisation

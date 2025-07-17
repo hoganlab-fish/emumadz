@@ -47,5 +47,8 @@ Manual
 The critical packages and their version numbers are listed below for reference::
 
     bcftools==1.19-gcc-13.2.0
-    samtools==1.19.2-gcc-13.2.0
+    gatk/4.5.0.0-gcc-13.2.0
     nextflow==25.04.2.5947
+    pandas==2.3.0
+    python==3.13.3
+    samtools==1.19.2-gcc-13.2.0

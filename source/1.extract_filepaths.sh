@@ -88,10 +88,15 @@ main() {
     grep -Pv '175-1-Sib|TL233872-22-1-I-MAN-20231124')
     for i in ${SAMPLES}; do generate_sample_sheet $i ${DATA_DIR}/samplesheet.${SEQRUN_231201}.tsv; done
     
-    (cat ${DATA_DIR}/samplesheet.${SEQRUN_220930}.tsv; \
+    (cat ${Samplesheet_Ref}; 
+        tail -n +2 ${DATA_DIR}/samplesheet.${SEQRUN_220930}.tsv; \
         tail -n +2 ${DATA_DIR}/samplesheet.${SEQRUN_221014}.tsv; \
         tail -n +2 ${DATA_DIR}/samplesheet.${SEQRUN_231201}.tsv) \
         > ${DATA_DIR}/samplesheet.tmp
+
+    python 2.validate_samplesheet.py \
+        ${DATA_DIR}/samplesheet.tmp \
+        -o ${DATA_DIR}/samplesheet_original.tsv
 }
 
 main
