@@ -7,13 +7,15 @@
 #SBATCH --mail-type=ALL
 #SBATCH --partition=rhel_short
 #SBATCH --output="gatk.out"
-#SBATCH --mem-per-cpu=16000
+#SBATCH --mem-per-cpu=4000
 
 # Script: 4.run_gatk.sh
 # Purpose: Perform germline variant calling on a cohort of BAM files using GATK HaplotypeCaller and GenotypeGVCFs
 
 # Load gatk 4.5.0
 module load gatk/4.5.0.0-gcc-13.2.0
+THREAD=16
+MEMORY=64
 
 # Setup paths
 SAMPLE_METADATA="../data/samplesheet_new.tsv"
@@ -40,7 +42,7 @@ make_gvcfs() {
     #   - compare against old pipeline
     #   - formulate as pooling ref genotypes
     for BAM in "${BAM_FILES}"; do
-        echo gatk --java-options "-Xmx16g" HaplotypeCaller \
+        gatk --java-options "-Xmx${MEMORY}g" HaplotypeCaller \
             -R "${REF_GENOME}" \
             -I "${BAM}" \
             -O "${VCF_GVCF_DIR}/${SAMPLE/.bam}.g.vcf.gz" \
@@ -63,17 +65,17 @@ make_genomicsdb() {
     # Step 3: Import GVCFs into GenomicsDB
     # TODO:
     #   - as above
-    gatk --java-options "-Xmx16g" GenomicsDBImport \
+    gatk --java-options "-Xmx${MEMORY}g" GenomicsDBImport \
         --sample-name-map "${SAMPLE_MAP}" \
         --genomicsdb-workspace-path "${GDB_DIR}" \
-        --reader-threads 16
+        --reader-threads "${THREAD}"
 }
 
 run_genotyping() {
     # Step 4: Joint genotyping
     # TODO:
     #   - as above
-    gatk --java-options "-Xmx16g" GenotypeGVCFs \
+    gatk --java-options "-Xmx${MEMORY}g" GenotypeGVCFs \
         -R "${REF_GENOME}" \
         -V gendb://${GDB_DIR} \
         -O "${VCF_GVCF_DIR}/cohort.vcf.gz"
