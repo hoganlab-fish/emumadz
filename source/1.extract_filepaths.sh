@@ -57,6 +57,21 @@ parse_sample_names() {
 main() {
     mkdir -p ${DATA_DIR}
 
+    # f0 reference generation
+    SEQRUN_220701="220701_A01221_0125_BHCCHNDMXY"
+    SAMPLES=$(for i in ${SEQRUN_220701}; do parse_sample_names ${i}; done | tr ' ' '\n' | sort | uniq)
+    
+    Samplesheet_Ref=${DATA_DIR}/samplesheet.${SEQRUN_220701}.tsv
+    if [ ! -f "${Samplesheet_Ref}" ]; then
+        printf "Sample_Identity\tFastq_File\tAlignment_File\tVCF_Original\tVCF_Merged\tVCF_ChrFixed\tVCF_Annotated\tVCF_Candidates\tSnzl_NoGaps_NBases\tSnzl_NoGaps_NSnps\tSnzl_WithGaps_NBases\tSnzl_WithGaps_NSnps\tJson\n" > ${Samplesheet_Ref}
+    fi
+    for i in ${SAMPLES}; do 
+        bam=$(find ${BASE_DIR}/Alignment_VariantCall/${SEQRUN_220701}/${i} -type f | grep "bam$")
+        vcf=$(find ${BASE_DIR}/Alignment_VariantCall/${SEQRUN_220701}/${i} -type f | grep "vcf$")
+        printf "${i}\tNA\t${bam}\t${vcf}\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n" >> \
+            ${Samplesheet_Ref}
+    done
+
     # all normal exclusion patterns should apply here
     SEQRUN_220930="220930_A00692_316_AHVMJFDSX3"
     SAMPLES=$(for i in ${SEQRUN_220930}; do parse_sample_names ${i}; done | tr ' ' '\n' | sort | uniq)
