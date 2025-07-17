@@ -42,7 +42,7 @@ make_gvcfs() {
     #   - compare against old pipeline
     #   - formulate as pooling ref genotypes
     for BAM in $(echo "${BAM_FILES}"); do
-        echo gatk --java-options "-Xmx${MEMORY}g" HaplotypeCaller \
+        gatk --java-options "-Xmx${MEMORY}g" HaplotypeCaller \
             -R "${REF_GENOME}" \
             -I "${BAM}" \
             -O "${VCF_GVCF_DIR}/${BAM/.bam}.g.vcf.gz" \
