@@ -14,13 +14,14 @@
 
 # Load gatk 4.5.0
 module load gatk/4.5.0.0-gcc-13.2.0
+module load samtools/1.19.2-gcc-13.2.0
 THREAD=16
 MEMORY=64
 
 # Setup paths
 SAMPLE_METADATA="../data/samplesheet_new.tsv"
 OUT_DIR="../results/"
-REF_GENOME="../data/Reference/GCA_000002035.2_Zv9_genomic.fna"
+REF_GENOME=$(realpath "../data/Reference/GCA_000002035.2_Zv9_genomic.fna")
 
 # List of BAM files
 BAM_FILES=$(cut -f2 ${SAMPLE_METADATA} | tail -n +2)
@@ -35,6 +36,11 @@ mkdir -p ${VCF_GVCF_DIR}
 SAMPLE_MAP="${OUT_DIR}/sample_map.txt"
 GDB_DIR="${OUT_DIR}/GDB"
 mkdir -p ${GDB_DIR}
+
+create_index() {
+    samtools faidx ${REF_GENOME}
+    gatk CreateSequenceDictionary -R "${REF_GENOME}" -O "${REF_GENOME/fna/dict}"
+}
 
 make_gvcfs() {
     # Step 1: Generate GVCFs for each sample
@@ -82,6 +88,7 @@ run_genotyping() {
 }
 
 main() {
+    create_index
     make_gvcfs
     make_samplemap
     make_genomicsdb
