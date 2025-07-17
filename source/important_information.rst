@@ -26,6 +26,9 @@ Code in this repository is provided under a `MIT license`_. This documentation i
 Important information
 ---------------------
 
+.. warning::
+   Parts of the pipeline silently truncate file names. To fix this, original filenames were shortened. A map to the original file names were preserved.
+
 Experimental design
 +++++++++++++++++++
 
