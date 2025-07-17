@@ -83,6 +83,7 @@ For the purposes of rerunning this experiment, we only want the ``bam`` alignmen
    ../results/Snzl_WithGaps_NSnps
    ../results/Json
    
+While the ``bam`` files are not directly included in this repository due to size constraints, ``md5`` sums are preserved in ``data/Alignment_File/bam.md5``.
 
 1. Whole zebrafish genome assembly
 ++++++++++++++++++++++++++++++++++
