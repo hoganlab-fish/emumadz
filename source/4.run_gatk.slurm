@@ -23,7 +23,7 @@ OUT_DIR="../results/"
 REF_GENOME="../data/Reference/GCA_000002035.2_Zv9_genomic.fna"
 
 # List of BAM files
-BAM_FILES=$(cut -f2 ${SAMPLE_METADATA} | grep -v 'Alignment_File')
+BAM_FILES=$(cut -f2 ${SAMPLE_METADATA} | tail -n +2)
 
 # Create output directories, GVCF is temporary
 VCF_GVCF_DIR="${OUT_DIR}/VCF_GVCF"
@@ -41,8 +41,8 @@ make_gvcfs() {
     # TODO: 
     #   - compare against old pipeline
     #   - formulate as pooling ref genotypes
-    for BAM in "${BAM_FILES}"; do
-        gatk --java-options "-Xmx${MEMORY}g" HaplotypeCaller \
+    for BAM in $(echo "${BAM_FILES}"); do
+        echo gatk --java-options "-Xmx${MEMORY}g" HaplotypeCaller \
             -R "${REF_GENOME}" \
             -I "${BAM}" \
             -O "${VCF_GVCF_DIR}/${BAM/.bam}.g.vcf.gz" \
