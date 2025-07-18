@@ -145,7 +145,10 @@ Perform the variant calling for the F0, pooling samples.
 .. attention::
    In the first iteration, samples were aggregated only but not pooled during variant calling.
 
-Run the variant calling with the ``4.run_gatk.sh`` script.
+Run the ``4.run_gatk.sh`` script and follow the instructions.
+
+.. caution::
+   The script is not designed to be run in one go. Each step submits a series of slurm jobs, which generates the files used in the next stage of the pipeline.
 
 .. attention::
    The original iteration of the pipeline used an older variant caller ``UnifiedGenotyper``. This method is now obsolete and documentation is sparse. We use the updated ``HaplotypeCaller``, which is functionally similar and has a higher performance. `We follow the pipeline described here.`_

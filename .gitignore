@@ -1,6 +1,9 @@
 # Bioinformatics pipeline files
 *bam
 *bai
+*fna
+*out
+*slurm
 *vcf
 
 # Byte-compiled / optimized / DLL files

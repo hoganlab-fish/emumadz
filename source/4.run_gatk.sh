@@ -1,32 +1,33 @@
 #!/bin/bash
-
 # Script: 4.run_gatk.sh
 # Purpose: Perform germline variant calling on a cohort of BAM files using GATK HaplotypeCaller and GenotypeGVCFs
 
 # Load gatk 4.5.0
-module load gatk/4.5.0.0-gcc-13.2.0
-module load samtools/1.19.2-gcc-13.2.0
-THREAD=16
-MEMORY=64
+setup_params() {
+    module load gatk/4.5.0.0-gcc-13.2.0
+    module load samtools/1.19.2-gcc-13.2.0
+    THREAD=4
+    MEMORY=16
 
-# Setup paths
-SAMPLE_METADATA="../data/samplesheet_new.tsv"
-OUT_DIR="../results/"
-REF_GENOME=$(realpath "../data/Reference/GCA_000002035.2_Zv9_genomic.fna")
+    # Setup paths
+    SAMPLE_METADATA="../data/samplesheet_new.tsv"
+    OUT_DIR="../results/"
+    REF_GENOME=$(realpath "../data/Reference/GCA_000002035.2_Zv9_genomic.fna")
 
-# List of BAM files
-BAM_FILES=$(cut -f2 ${SAMPLE_METADATA} | tail -n +2)
+    # List of BAM files
+    BAM_FILES=$(cut -f2 ${SAMPLE_METADATA} | tail -n +2)
 
-# Create output directories, GVCF is temporary
-VCF_GVCF_DIR="${OUT_DIR}/VCF_GVCF"
-VCF_Original="${OUT_DIR}/VCF_Original"
-mkdir -p ${VCF_Original}
-mkdir -p ${VCF_GVCF_DIR}
+    # Create output directories, GVCF is temporary
+    VCF_GVCF_DIR="${OUT_DIR}/VCF_GVCF"
+    VCF_Original="${OUT_DIR}/VCF_Original"
+    mkdir -p ${VCF_Original}
+    mkdir -p ${VCF_GVCF_DIR}
 
-# GenomicsDBImport sample map
-SAMPLE_MAP="${OUT_DIR}/sample_map.txt"
-GDB_DIR="${OUT_DIR}/GDB"
-mkdir -p ${GDB_DIR}
+    # GenomicsDBImport sample map
+    SAMPLE_MAP="${OUT_DIR}/sample_map.txt"
+    GDB_DIR="${OUT_DIR}/GDB"
+    mkdir -p ${GDB_DIR}
+}
 
 create_index() {
     samtools faidx ${REF_GENOME}
@@ -80,12 +81,18 @@ run_genotyping() {
 }
 
 main() {
-    create_index
-    make_gvcfs
-    make_samplemap
-    make_genomicsdb
-    run_genotyping
-    echo "Variant calling pipeline complete. Output VCF: ${VCF_GVCF_DIR}/cohort.vcf.gz"
+    echo "note:"
+    echo "  - do not run this directly"
+    echo "  - each line submits a series of slurm jobs"
+    echo "  - wait until each completes successfully (can take days)"
+    echo "  - then rerun the next step"
+
+    echo "Step 1: bash 4.1.make_gvcfs.sh"
+    # bash 4.1.make_gvcfs.sh
+    # make_samplemap
+    # make_genomicsdb
+    # run_genotyping
+    # echo "Variant calling pipeline complete. Output VCF: ${VCF_GVCF_DIR}/cohort.vcf.gz"
 }
 
 main

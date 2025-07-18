@@ -1,16 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name="gatk"
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
-#SBATCH --time=88:00:00
-#SBATCH --mail-user=Tyrone.Chen@petermac.org
-#SBATCH --mail-type=ALL
-#SBATCH --partition=rhel_long
-#SBATCH --output="gatk.out"
-#SBATCH --mem-per-cpu=4000
-
-# Script: 4.run_gatk.sh
-# Purpose: Perform germline variant calling on a cohort of BAM files using GATK HaplotypeCaller and GenotypeGVCFs
+# Run gatk HaplotypeCaller per individual file concurrently
 
 # Load gatk 4.5.0
 setup_params() {
@@ -51,14 +40,14 @@ make_gvcfs() {
     #   - formulate as pooling ref genotypes
     for BAM in $(echo "${BAM_FILES}"); do
         OUT_VCF=$(echo $BAM | cut -d '/' -f4)
-        sbatch 4.1.make_gvcfs.slurm \
+        bash 4.1.make_gvcfs.slurm \
             $(basename ${BAM/.bam}) \
             ${MEMORY} \
             ${REF_GENOME} \
             ${BAM} \
             ${VCF_GVCF_DIR}/${OUT_VCF/bam}g.vcf.gz
     # this is a batch submission
-    # slurm scripts are excluded
+    # slurm scripts are excluded from the repository
     # we show the command that would be run
     # gatk --java-options "-Xmx${MEMORY}g" HaplotypeCaller \
     #     -R "${REF_GENOME}" \
@@ -70,7 +59,7 @@ make_gvcfs() {
 
 main() {
     setup_params
-    # create_index
+    create_index
     make_gvcfs
 }
 
