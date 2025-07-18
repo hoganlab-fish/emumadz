@@ -1,13 +1,4 @@
 #!/bin/bash
-#SBATCH --job-name="gatk"
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --time=24:00:00
-#SBATCH --mail-user=Tyrone.Chen@petermac.org
-#SBATCH --mail-type=ALL
-#SBATCH --partition=rhel_short
-#SBATCH --output="gatk.out"
-#SBATCH --mem-per-cpu=4000
 
 # Script: 4.run_gatk.sh
 # Purpose: Perform germline variant calling on a cohort of BAM files using GATK HaplotypeCaller and GenotypeGVCFs
