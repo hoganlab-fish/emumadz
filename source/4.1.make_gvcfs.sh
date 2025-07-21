@@ -25,7 +25,6 @@ setup_params() {
     # GenomicsDBImport sample map
     SAMPLE_MAP="${OUT_DIR}/sample_map.txt"
     GDB_DIR="${OUT_DIR}/GDB"
-    mkdir -p ${GDB_DIR}
 }
 
 create_index() {
@@ -45,7 +44,8 @@ make_gvcfs() {
             ${MEMORY} \
             ${REF_GENOME} \
             ${BAM} \
-            ${VCF_GVCF_DIR}/${OUT_VCF/bam}g.vcf.gz
+            ${VCF_GVCF_DIR}/${OUT_VCF/bam}g.vcf.gz \
+            ${THREAD}
     # this is a batch submission
     # slurm scripts are excluded from the repository
     # we show the command that would be run

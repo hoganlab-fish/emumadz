@@ -6,8 +6,8 @@
 setup_params() {
     module load gatk/4.5.0.0-gcc-13.2.0
     module load samtools/1.19.2-gcc-13.2.0
-    THREAD=4
-    MEMORY=16
+    THREAD=16
+    MEMORY=64
 
     # Setup paths
     SAMPLE_METADATA="../data/samplesheet_new.tsv"
@@ -25,8 +25,7 @@ setup_params() {
 
     # GenomicsDBImport sample map
     SAMPLE_MAP="${OUT_DIR}/sample_map.txt"
-    GDB_DIR="${OUT_DIR}/GDB"
-    mkdir -p ${GDB_DIR}
+    GDB_DIR="../results/GDB"
 }
 
 create_index() {
@@ -41,11 +40,21 @@ make_gvcfs() {
     #   - formulate as pooling ref genotypes
     for BAM in $(echo "${BAM_FILES}"); do
         OUT_VCF=$(echo $BAM | cut -d '/' -f4)
-        gatk --java-options "-Xmx${MEMORY}g" HaplotypeCaller \
-            -R "${REF_GENOME}" \
-            -I "${BAM}" \
-            -O "${VCF_GVCF_DIR}/${OUT_VCF/bam}g.vcf.gz" \
-            -ERC GVCF
+        bash 4.1.make_gvcfs.slurm \
+            $(basename ${BAM/.bam}) \
+            ${MEMORY} \
+            ${REF_GENOME} \
+            ${BAM} \
+            ${VCF_GVCF_DIR}/${OUT_VCF/bam}g.vcf.gz \
+            ${THREAD}
+    # this is a batch submission
+    # slurm scripts are excluded from the repository
+    # we show the command that would be run
+    # gatk --java-options "-Xmx${MEMORY}g" HaplotypeCaller \
+    #     -R "${REF_GENOME}" \
+    #     -I "${BAM}" \
+    #     -O "${VCF_GVCF_DIR}/${OUT_VCF/bam}g.vcf.gz" \
+    #     -ERC GVCF
     done
 }
 
@@ -65,9 +74,11 @@ make_genomicsdb() {
     # TODO:
     #   - as above
     gatk --java-options "-Xmx${MEMORY}g" GenomicsDBImport \
-        --sample-name-map "${SAMPLE_MAP}" \
         --genomicsdb-workspace-path "${GDB_DIR}" \
+        $(cut -f2 $SAMPLE_MAP | sed -e "s|^|\-V |") \
+        $(cut -f1 ${REF_GENOME}.fai | head -n 25 | sed "s|^|--intervals |") \
         --reader-threads "${THREAD}"
+        # --sample-name-map "${SAMPLE_MAP}" \    
 }
 
 run_genotyping() {
@@ -83,15 +94,22 @@ run_genotyping() {
 main() {
     echo "note:"
     echo "  - do not run this directly"
-    echo "  - each line submits a series of slurm jobs"
+    echo "  - each of the steps below submits one or more slurm jobs"
     echo "  - wait until each completes successfully (can take days)"
-    echo "  - then rerun the next step"
+    echo "  - then run the next step"
 
-    echo "Step 1: bash 4.1.make_gvcfs.sh"
+    echo "Step 4.1: bash 4.1.make_gvcfs.sh"
     # bash 4.1.make_gvcfs.sh
-    # make_samplemap
+    echo "Step 4.2: bash 4.2.make_genomicsdb.slurm"
+    echo "Outside a cluster env, this is equivalent to running the following 3 functions:"
+    echo "  setup_params"
+    echo "  make_samplemap [OPTIONAL]"
+    echo "  make_genomicsdb"
+    # setup_params
+    # make_samplemap [OPTIONAL]
     # make_genomicsdb
-    # run_genotyping
+    echo "Step 4.3: bash 4.3.joint_genotyping.slurm"
+    echo "  coming soon"
     # echo "Variant calling pipeline complete. Output VCF: ${VCF_GVCF_DIR}/cohort.vcf.gz"
 }
 
