@@ -269,7 +269,7 @@ Five entries with varying levels of *read depth* {0,10,20,30,40}. In this sample
 
 .. code-block:: shell
 
-   head -n1172 TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf
+   head -n1172 TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf > header.vcf
    (cat header.vcf; for i in {1..5}; do echo $(grep chr24 TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf | grep -m 1 423800); done) > test_dp.tmp
    tac test_dp.tmp | sed -e "1,5s| |\t|g" -e "1s/DP=10/DP=40/" -e "1s/423800/5/" -e "2s/DP=10/DP=30/" -e "2s/423800/4/" -e "3s/DP=10/DP=20/" -e "3s/423800/3/" -e "4s/423800/2/" -e "5s/423800/1/" -e "5s/DP=10/DP=0/" | tac > test_dp.vcf
    rm test_dp.tmp
@@ -284,7 +284,6 @@ The ``snzl`` strict candidate pipeline is run.
 
 .. code:: shell
 
-   # we know chr24:423800 has info we want
    infile_path="test_dp.vcf.gz"
    outfile_path="test_dp_out.vcf"
    sample_name="TL2312073-163-4L-MAN-20231116"
@@ -307,10 +306,60 @@ Controls (SNP quantity)
 .. note::
     ``./.:.:.:.:.`` indicates a non-SNP event in the corresponding sample.
 
-Five fields with varying numbers of SNP across the sample and four references. In this sample, *read depth* is set to 100. SNP effect was predicted to be ``MODERATE``, matching filter threshold. For the purposes of this test, SNP positions are artificial.
+Sample with varying numbers of SNPs across the four references {0,1,2,3,4}. In this sample, *read depth* is set to 100. SNP effect was predicted to be ``MODERATE``, matching filter threshold. For the purposes of this test, SNP positions are artificial.
 
+This sample was identified as a region of high interest by the original pipeline.
 
+.. code-block:: shell
 
+   OUT="test_snp.vcf"
+   SNP='1/1:0,16:16:15:158,15,0'
+   NAN='./.:.:.:.:.'
+
+   head -n1172 TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf > header.vcf
+   mv header.vcf ${OUT}
+   paste -d '\t' \
+      <(grep -m 1 5996897 chr24.vcf | cut -f1-10 | sed "s|5996897|1|") \
+      <(printf "${NAN}\t${NAN}\t${NAN}\t${NAN}\n") >> ${OUT}
+   paste -d '\t' \
+      <(grep -m 1 5996897 chr24.vcf | cut -f1-10 | sed "s|5996897|2|") \
+      <(printf "${SNP}\t${NAN}\t${NAN}\t${NAN}\n") >> ${OUT}
+   paste -d '\t' \
+      <(grep -m 1 5996897 chr24.vcf | cut -f1-10 | sed "s|5996897|3|") \
+      <(printf "${SNP}\t${SNP}\t${NAN}\t${NAN}\n") >> ${OUT}
+   paste -d '\t' \
+      <(grep -m 1 5996897 chr24.vcf | cut -f1-10 | sed "s|5996897|4|") \
+      <(printf "${SNP}\t${SNP}\t${SNP}\t${NAN}\n") >> ${OUT}
+   paste -d '\t' \
+      <(grep -m 1 5996897 chr24.vcf | cut -f1-10 | sed "s|5996897|5|") \
+      <(printf "${SNP}\t${SNP}\t${SNP}\t${SNP}\n") >> ${OUT}
+   sed -i "s|DP=25|DP=100|" $OUT
+   bgzip ${OUT}
+   bcftools index -t ${OUT}.gz
+   
+Here is an example of one entry in the file. Only the ``SNP`` field is modified in each iteration, with an increasing number of blanks: ``./.:.:.:.:.`` ::
+
+   chr24   5       .       A       T       129.9   .       BaseQRankSum=0;Dels=0;ExcessHet=3.0103;FS=0;HaplotypeScore=0;MQ=12.77;MQ0=6;MQRankSum=0.967;QD=3.97;ReadPosRankSum=0.967;SOR=1.179;DP=100;AF=1;MLEAC=2;MLEAF=1;AN=4;AC=4;EFF=NON_SYNONYMOUS_CODING(MODERATE|MISSENSE|gaA/gaT|E32D|310|si:ch211-193e5.4|protein_coding|CODING|ENSDART00000132686|2|T|WARNING_TRANSCRIPT_INCOMPLETE),UPSTREAM(MODIFIER||1545||310|si:ch211-193e5.3|protein_coding|CODING|ENSDART00000077933||T|WARNING_TRANSCRIPT_INCOMPLETE),UPSTREAM(MODIFIER||2423||279|si:ch211-193e5.3|protein_coding|CODING|ENSDART00000153736||T|WARNING_TRANSCRIPT_NO_START_CODON),UPSTREAM(MODIFIER||237||278|si:ch211-193e5.4|protein_coding|CODING|ENSDART00000077922||T|WARNING_TRANSCRIPT_NO_START_CODON),DOWNSTREAM(MODIFIER||2894|||CT573382.1|miRNA|NON_CODING|ENSDART00000119433||T),DOWNSTREAM(MODIFIER||705|||CT573382.2|miRNA|NON_CODING|ENSDART00000119567||T),DOWNSTREAM(MODIFIER||2377||503|acbd5a|protein_coding|CODING|ENSDART00000135124||T),DOWNSTREAM(MODIFIER||2377||502|acbd5a|protein_coding|CODING|ENSDART00000122018||T),DOWNSTREAM(MODIFIER||2377||501|acbd5a|protein_coding|CODING|ENSDART00000007373||T)      GT:AD:DP:GQ:PL  1/1:7,2:9:6:63,6,0      1/1:0,16:16:15:158,15,01/1:0,16:16:15:158,15,0  1/1:0,16:16:15:158,15,0 1/1:0,16:16:15:158,15,0
+
+The ``snzl`` strict candidate pipeline is run.
+
+.. code:: shell
+
+   infile_path="test_snp.vcf.gz"
+   outfile_path="test_snp_out.vcf"
+   sample_name="TL2312073-163-4L-MAN-20231116"
+   chromosome="chr24"
+
+   # see only 2 alleles (not sure what cases would result in >2 in zebrafish)
+   bcftools view --max-alleles 2 ${infile_path} ${chromosome} | \
+      snzl --no-filtered --output ${outfile_path} \
+         - candidate_snp -csm ${sample_name} \
+         snpeff -sem ${sample_name} -see EFF -semi MODERATE
+
+All non-strict candidates were retained and all strict candidates were discarded::
+
+   grep -v '#' test_snp_out.vcf | grep -P './.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.' | wc -l
+   # 0
 
 Controls (SNP presence and DP quantity)
 ***************************************
