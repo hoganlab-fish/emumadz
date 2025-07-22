@@ -167,6 +167,175 @@ Run the ``4.run_gatk.sh`` script and follow the instructions.
 5. Identify strict candidate SNPs
 +++++++++++++++++++++++++++++++++
 
+Description of claims
+#####################
+
+The ``snzl`` module claims to identify strict candidate SNPs using the following criteria:
+1. The mutant must be covered to a depth of \>= 1 read
+2. At least one of the unaffected sibling or other samples must be covered to a depth of \>= 1 read
+3. If the mutant and sibling have a single allele, it must not be the same in both
+4. The mutant must have a majority allele that is:
+   a. not the majority allele in any of the 'other' samples
+
+
+.. raw:: html
+
+   <details>
+   <summary><a>Unit tests of ``snzl``</a></summary>
+
+
+Setup test environment
+######################
+
+.. caution::
+   These steps are specific to the Peter Mac compute cluster
+
+Load singularity container. You can either load it manually::
+   
+   apptainer shell --bind \
+      /team_folders/hogan_lab/Hogan_Lab_Shared/Zebrafish_Homozygosity/,/etc/profile.d/ --home /hogan_lab/Hogan_Lab_People/Tyrone_Chen/repos/hogan-lab-shared-repository/wgs_vbm/ /config/spack/containers/centos7/container.sif
+   source /etc/profile.d/modules.sh
+   source /team_folders/hogan_lab/Hogan_Lab_Shared/Zebrafish_Homozygosity/gjbzebrafishtools/venv/bin/activate
+   module load tabix
+   module load bcftools
+
+Or specify this as an option in the ``sbatch`` script::
+
+   #SBATCH --container /config/spack/containers/centos7/container.sif
+   source /etc/profile.d/modules.sh
+   export LD_LIBRARY_PATH=/config/binaries/gsl/2.7.1/lib:/config/binaries/gcc/12.2.0/lib64:/config/binaries/R/4.2.0.Core/lib64/R/lib:/config/binaries/python/3.8.1/lib:/config/binaries/hdf5/1.10.5/lib
+   source /team_folders/hogan_lab/Hogan_Lab_Shared/Zebrafish_Homozygosity/gjbzebrafishtools/venv/bin/activate
+
+``sinteractive`` option::
+
+   sinteractive -p rhel_short --time 0-08:00:00 --mem 64G --container /config/spack/containers/centos7/container.sif
+   source /etc/profile.d/modules.sh
+   source /team_folders/hogan_lab/Hogan_Lab_Shared/Zebrafish_Homozygosity/gjbzebrafishtools/venv/bin/activate
+
+.. warning::
+   Library ``snzl`` only works on CentOS7.
+
+.. warning::
+   Library ``snzl`` no longer exists in public.
+
+Test design
+###########
+
+Check the original assumptions by manually editing the VCF, varying SNP and DP, and see if ``snzl`` picks it up.
+
+To test these claims, in each case a ``vcf`` file of a target sample was subsampled to generate a small test sample. Most headers were removed.
+
+All of the steps below are carried out in the ``test`` directory.
+
+Controls (SNP quantity)
+***********************
+
+.. note::
+    ``./.:.:.:.:.`` indicates a non-SNP event in the corresponding sample.
+
+Five fields with varying numbers of SNP across the sample and four references::
+
+   cd test
+   # a file from the original sample set
+   head -n1172 TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf > snps.1.4.vcf
+   
+   # take 5 regions where the sample and all four references have SNPs
+   grep -v '##' TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf | head -n20001 | grep -v './.:.:.:.' >> snps.1.4.vcf
+
+   # bgzip    
+   bgzip snps.1.4.vcf
+   bcftools index -t snps.1.4.vcf.gz
+
+There are 8 SNPs in the vcf file. Each SNP has SNPs removed from one sample to end up with the following design, where the first column is the sample and all trailing columns are the references::
+
+   1 1 1 1 1
+   1 1 1 1 1
+   0 1 1 1 1
+   1 1 1 1 0
+   1 1 1 0 0
+   1 1 0 0 0
+   1 0 0 0 0
+   0 0 0 0 0
+
+DP values are also varied.
+
+Controls (DP quantity)
+**********************
+
+.. note::
+    ``DP`` indicates read depth. Discussion on an ideal read depth is outside the scope of this document. 10-30 is generally considered OK.
+
+Five entries with varying levels of *read depth* {0,10,20,30,40}. In this sample, SNPs are not detected in any references, making this a strict candidate. SNP effect was predicted to be ``MODERATE``, matching filter threshold. For the purposes of this test, SNP positions are artificial.
+
+.. code-block:: shell
+
+   head -n1172 TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf
+   (cat header.vcf; for i in {1..5}; do echo $(grep chr24 TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf | grep -m 1 423800); done) > test_dp.tmp
+   tac test_dp.tmp | sed -e "1,5s| |\t|g" -e "1s/DP=10/DP=40/" -e "1s/423800/5/" -e "2s/DP=10/DP=30/" -e "2s/423800/4/" -e "3s/DP=10/DP=20/" -e "3s/423800/3/" -e "4s/423800/2/" -e "5s/423800/1/" -e "5s/DP=10/DP=0/" | tac > test_dp.vcf
+   rm test_dp.tmp
+   bgzip test_dp.vcf
+   bcftools index -t test_dp.vcf.gz
+
+Here is an example of one entry in the file. Only the ``DP`` value is modified in each iteration::
+
+   chr24   5       .       G       T       269.98  .       BaseQRankSum=0;Dels=0;ExcessHet=3.0103;FS=0;HaplotypeScore=0.9997;MQ=60;MQ0=0;MQRankSum=0;QD=27;ReadPosRankSum=1.036;SOR=0.307;DP=40;AF=0.5;MLEAC=1;MLEAF=0.5;AN=2;AC=1;EFF=NON_SYNONYMOUS_CODING(MODERATE|MISSENSE|Gtt/Ttt|V7F|128|RECK|protein_coding|CODING|ENSDART00000129135|1|T|WARNING_TRANSCRIPT_NO_START_CODON),DOWNSTREAM(MODIFIER||2776||157|INSC|protein_coding|CODING|ENSDART00000131091||T|WARNING_TRANSCRIPT_NO_STOP_CODON)      GT:AD:DP:GQ:PL  0/1:1,9:10:13:298,0,13  ./.:.:.:.:.    ./.:.:.:.:.      ./.:.:.:.:.     ./.:.:.:.:.
+
+The ``snzl`` strict candidate pipeline is run.
+
+.. code:: shell
+
+   # we know chr24:423800 has info we want
+   infile_path="test_dp.vcf.gz"
+   outfile_path="test_dp_out.vcf"
+   sample_name="TL2312073-163-4L-MAN-20231116"
+   chromosome="chr24"
+
+   # see only 2 alleles (not sure what cases would result in >2 in zebrafish)
+   bcftools view --max-alleles 2 ${infile_path} ${chromosome} | \
+      snzl --no-filtered --output ${outfile_path} \
+         - candidate_snp -csm ${sample_name} \
+         snpeff -sem ${sample_name} -see EFF -semi MODERATE
+
+Although this was a strict candidate, no candidates were detected::
+
+   grep -v '#' test_dp_out.vcf | wc -l
+   # get zero lines detected
+
+Controls (SNP quantity)
+***********************
+
+.. note::
+    ``./.:.:.:.:.`` indicates a non-SNP event in the corresponding sample.
+
+Five fields with varying numbers of SNP across the sample and four references. In this sample, *read depth* is set to 100. SNP effect was predicted to be ``MODERATE``, matching filter threshold. For the purposes of this test, SNP positions are artificial.
+
+
+
+
+Controls (SNP presence and DP quantity)
+***************************************
+
+Unit test of old code
+#####################
+
+.. code:: shell
+
+   # we know chr24:423800 has info we want
+   infile_path="TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf.gz"
+   outfile_path="strict_candidates.vcf"
+   sample_name="TL2312073-163-4L-MAN-20231116"
+   chromosome="chr24"
+
+   # see only 2 alleles (not sure what cases would result in >2 in zebrafish)
+   bcftools view --max-alleles 2 ${infile_path} ${chromosome} | \
+      snzl --no-filtered --output ${outfile_path} \
+         - candidate_snp -csm ${sample_name} \
+         snpeff -sem ${sample_name} -see EFF -semi MODERATE
+
+.. raw:: html
+
+   </details>
+
 
 6. Filter out predicted high impact SNPs
 ++++++++++++++++++++++++++++++++++++++++
