@@ -227,38 +227,6 @@ To test these claims, in each case a ``vcf`` file of a target sample was subsamp
 
 All of the steps below are carried out in the ``test`` directory.
 
-Controls (SNP quantity)
-***********************
-
-.. note::
-    ``./.:.:.:.:.`` indicates a non-SNP event in the corresponding sample.
-
-Five fields with varying numbers of SNP across the sample and four references::
-
-   cd test
-   # a file from the original sample set
-   head -n1172 TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf > snps.1.4.vcf
-   
-   # take 5 regions where the sample and all four references have SNPs
-   grep -v '##' TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf | head -n20001 | grep -v './.:.:.:.' >> snps.1.4.vcf
-
-   # bgzip    
-   bgzip snps.1.4.vcf
-   bcftools index -t snps.1.4.vcf.gz
-
-There are 8 SNPs in the vcf file. Each SNP has SNPs removed from one sample to end up with the following design, where the first column is the sample and all trailing columns are the references::
-
-   1 1 1 1 1
-   1 1 1 1 1
-   0 1 1 1 1
-   1 1 1 1 0
-   1 1 1 0 0
-   1 1 0 0 0
-   1 0 0 0 0
-   0 0 0 0 0
-
-DP values are also varied.
-
 Controls (DP quantity)
 **********************
 
@@ -276,7 +244,7 @@ Five entries with varying levels of *read depth* {0,10,20,30,40}. In this sample
    bgzip test_dp.vcf
    bcftools index -t test_dp.vcf.gz
 
-Here is an example of one entry in the file. Only the ``DP`` value is modified in each iteration::
+Here is an example of one entry in the file. A strict candidate is chosen where only the sample contains the SNP, and it is absent in the ``F0`` generation. Only the ``DP`` value is modified in each iteration::
 
    chr24   5       .       G       T       269.98  .       BaseQRankSum=0;Dels=0;ExcessHet=3.0103;FS=0;HaplotypeScore=0.9997;MQ=60;MQ0=0;MQRankSum=0;QD=27;ReadPosRankSum=1.036;SOR=0.307;DP=40;AF=0.5;MLEAC=1;MLEAF=0.5;AN=2;AC=1;EFF=NON_SYNONYMOUS_CODING(MODERATE|MISSENSE|Gtt/Ttt|V7F|128|RECK|protein_coding|CODING|ENSDART00000129135|1|T|WARNING_TRANSCRIPT_NO_START_CODON),DOWNSTREAM(MODIFIER||2776||157|INSC|protein_coding|CODING|ENSDART00000131091||T|WARNING_TRANSCRIPT_NO_STOP_CODON)      GT:AD:DP:GQ:PL  0/1:1,9:10:13:298,0,13  ./.:.:.:.:.    ./.:.:.:.:.      ./.:.:.:.:.     ./.:.:.:.:.
 
@@ -295,7 +263,9 @@ The ``snzl`` strict candidate pipeline is run.
          - candidate_snp -csm ${sample_name} \
          snpeff -sem ${sample_name} -see EFF -semi MODERATE
 
-Although this was a strict candidate, no candidates were detected::
+We expect the strict candidate to be detected where read depths \> 10.
+
+Instead, no candidates were detected::
 
    grep -v '#' test_dp_out.vcf | wc -l
    # get zero lines detected
@@ -306,7 +276,13 @@ Controls (SNP quantity)
 .. note::
     ``./.:.:.:.:.`` indicates a non-SNP event in the corresponding sample.
 
-Sample with varying numbers of SNPs across the four references {0,1,2,3,4}. In this sample, *read depth* is set to 100. SNP effect was predicted to be ``MODERATE``, matching filter threshold. For the purposes of this test, SNP positions are artificial.
+Sample with varying numbers of SNPs across the four references {0,1,2,3,4}. In this sample, *read depth* is set to 100. SNP effect was predicted to be ``MODERATE``, matching filter threshold. For the purposes of this test, SNP positions are artificial::
+
+   1 0 0 0 0
+   1 1 0 0 0
+   1 1 1 0 0
+   1 1 1 1 0
+   1 1 1 1 1
 
 This sample was identified as a region of high interest by the original pipeline.
 
@@ -345,6 +321,39 @@ The ``snzl`` strict candidate pipeline is run.
 
 .. code:: shell
 
+   infile_path="test_snp_dp.vcf.gz"
+   outfile_path="foo.vcf"
+   sample_name="TL2312073-163-4L-MAN-20231116"
+   chromosome="chr24"
+
+   # see only 2 alleles (not sure what cases would result in >2 in zebrafish)
+   bcftools view --max-alleles 2 ${infile_path} ${chromosome} | \
+      snzl --no-filtered --output ${outfile_path} \
+         - candidate_snp -csm ${sample_name} \
+         snpeff -sem ${sample_name} -see EFF -semi MODERATE
+
+We expect that all strict candidates will be retained and all non-strict candidates discarded.
+
+Instead, all non-strict candidates were retained and all strict candidates were discarded::
+
+   grep -v '#' test_snp_out.vcf | grep -P './.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.' | wc -l
+   # 0
+
+Controls (SNP presence and DP quantity)
+***************************************
+
+Next, both the tests are combined. ``test_snp.vcf.gz`` entries are duplicated and assigned DP values of either ``1`` or ``100``.
+
+.. code-block:: shell
+
+   (cat test_snp.vcf; grep -v '#' test_snp.vcf | sed "s|DP=100|DP=1|") | tac | sed -e "1s|\t5\t|\t50\t|" -e "2s|\t4\t|\t40\t|" -e "3s|\t3\t|\t30\t|" -e "4s|\t2\t|\t20\t|" -e "5s|\t1\t|\t10\t|" | tac > test_snp_dp.vcf
+   bgzip test_snp_dp.vcf
+   bcftools index -t test_snp_dp.vcf.gz
+
+The ``snzl`` strict candidate pipeline is run.
+
+.. code:: shell
+
    infile_path="test_snp.vcf.gz"
    outfile_path="test_snp_out.vcf"
    sample_name="TL2312073-163-4L-MAN-20231116"
@@ -356,30 +365,6 @@ The ``snzl`` strict candidate pipeline is run.
          - candidate_snp -csm ${sample_name} \
          snpeff -sem ${sample_name} -see EFF -semi MODERATE
 
-All non-strict candidates were retained and all strict candidates were discarded::
-
-   grep -v '#' test_snp_out.vcf | grep -P './.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.' | wc -l
-   # 0
-
-Controls (SNP presence and DP quantity)
-***************************************
-
-Unit test of old code
-#####################
-
-.. code:: shell
-
-   # we know chr24:423800 has info we want
-   infile_path="TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf.gz"
-   outfile_path="strict_candidates.vcf"
-   sample_name="TL2312073-163-4L-MAN-20231116"
-   chromosome="chr24"
-
-   # see only 2 alleles (not sure what cases would result in >2 in zebrafish)
-   bcftools view --max-alleles 2 ${infile_path} ${chromosome} | \
-      snzl --no-filtered --output ${outfile_path} \
-         - candidate_snp -csm ${sample_name} \
-         snpeff -sem ${sample_name} -see EFF -semi MODERATE
 
 .. raw:: html
 
