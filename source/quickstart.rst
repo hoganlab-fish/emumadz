@@ -167,8 +167,24 @@ Run the ``4.run_gatk.sh`` script and follow the instructions.
 5. Identify strict candidate SNPs
 +++++++++++++++++++++++++++++++++
 
-Description of claims
-#####################
+New way
+#######
+
+Example on chromosome 24 of sample ``TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf``.
+
+.. code-block:: shell
+
+   infile_path="TL2312073-163-4L-MAN-20231_Ref_merged_ChromFixed.vcf.annotated.vcf"
+   greppattern='./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.$'
+   head -n 1172 ${infile_path} > chr24.vcf
+   grep chr24 ${infile_path} >> chr24.vcf
+   grep -P ${greppattern} chr24.vcf > chr24.strict.vcf
+
+
+Custom module 
+#############
+
+Description of claims:
 
 The ``snzl`` module claims to identify strict candidate SNPs using the following criteria:
 1. The mutant must be covered to a depth of \>= 1 read
@@ -233,7 +249,7 @@ Controls (DP quantity)
 .. note::
     ``DP`` indicates read depth. Discussion on an ideal read depth is outside the scope of this document. 10-30 is generally considered OK.
 
-Five entries with varying levels of *read depth* {0,10,20,30,40}. In this sample, SNPs are not detected in any references, making this a strict candidate. SNP effect was predicted to be ``MODERATE``, matching filter threshold. For the purposes of this test, SNP positions are artificial.
+Five entries with varying levels of ``read depth`` ``{0,10,20,30,40}``. In this sample, SNPs are not detected in any references, making this a ``strict candidate``. SNP effect was predicted to be ``MODERATE``, matching filter threshold. For the purposes of this test, SNP positions are artificial.
 
 .. code-block:: shell
 
@@ -244,11 +260,11 @@ Five entries with varying levels of *read depth* {0,10,20,30,40}. In this sample
    bgzip test_dp.vcf
    bcftools index -t test_dp.vcf.gz
 
-Here is an example of one entry in the file. A strict candidate is chosen where only the sample contains the SNP, and it is absent in the ``F0`` generation. Only the ``DP`` value is modified in each iteration::
+Here is an example of one entry in the file. A ``strict candidate`` is chosen where only the sample contains the SNP, and it is absent in the ``F0`` generation. Only the ``DP`` value is modified in each iteration::
 
    chr24   5       .       G       T       269.98  .       BaseQRankSum=0;Dels=0;ExcessHet=3.0103;FS=0;HaplotypeScore=0.9997;MQ=60;MQ0=0;MQRankSum=0;QD=27;ReadPosRankSum=1.036;SOR=0.307;DP=40;AF=0.5;MLEAC=1;MLEAF=0.5;AN=2;AC=1;EFF=NON_SYNONYMOUS_CODING(MODERATE|MISSENSE|Gtt/Ttt|V7F|128|RECK|protein_coding|CODING|ENSDART00000129135|1|T|WARNING_TRANSCRIPT_NO_START_CODON),DOWNSTREAM(MODIFIER||2776||157|INSC|protein_coding|CODING|ENSDART00000131091||T|WARNING_TRANSCRIPT_NO_STOP_CODON)      GT:AD:DP:GQ:PL  0/1:1,9:10:13:298,0,13  ./.:.:.:.:.    ./.:.:.:.:.      ./.:.:.:.:.     ./.:.:.:.:.
 
-The ``snzl`` strict candidate pipeline is run.
+The ``snzl`` ``strict candidate`` pipeline is run.
 
 .. code:: shell
 
@@ -263,7 +279,7 @@ The ``snzl`` strict candidate pipeline is run.
          - candidate_snp -csm ${sample_name} \
          snpeff -sem ${sample_name} -see EFF -semi MODERATE
 
-We expect the strict candidate to be detected where read depths \> 10.
+We expect the ``strict candidate`` to be detected where ``read depths`` \> 10.
 
 Instead, no candidates were detected::
 
@@ -317,7 +333,7 @@ Here is an example of one entry in the file. Only the ``SNP`` field is modified 
 
    chr24   5       .       A       T       129.9   .       BaseQRankSum=0;Dels=0;ExcessHet=3.0103;FS=0;HaplotypeScore=0;MQ=12.77;MQ0=6;MQRankSum=0.967;QD=3.97;ReadPosRankSum=0.967;SOR=1.179;DP=100;AF=1;MLEAC=2;MLEAF=1;AN=4;AC=4;EFF=NON_SYNONYMOUS_CODING(MODERATE|MISSENSE|gaA/gaT|E32D|310|si:ch211-193e5.4|protein_coding|CODING|ENSDART00000132686|2|T|WARNING_TRANSCRIPT_INCOMPLETE),UPSTREAM(MODIFIER||1545||310|si:ch211-193e5.3|protein_coding|CODING|ENSDART00000077933||T|WARNING_TRANSCRIPT_INCOMPLETE),UPSTREAM(MODIFIER||2423||279|si:ch211-193e5.3|protein_coding|CODING|ENSDART00000153736||T|WARNING_TRANSCRIPT_NO_START_CODON),UPSTREAM(MODIFIER||237||278|si:ch211-193e5.4|protein_coding|CODING|ENSDART00000077922||T|WARNING_TRANSCRIPT_NO_START_CODON),DOWNSTREAM(MODIFIER||2894|||CT573382.1|miRNA|NON_CODING|ENSDART00000119433||T),DOWNSTREAM(MODIFIER||705|||CT573382.2|miRNA|NON_CODING|ENSDART00000119567||T),DOWNSTREAM(MODIFIER||2377||503|acbd5a|protein_coding|CODING|ENSDART00000135124||T),DOWNSTREAM(MODIFIER||2377||502|acbd5a|protein_coding|CODING|ENSDART00000122018||T),DOWNSTREAM(MODIFIER||2377||501|acbd5a|protein_coding|CODING|ENSDART00000007373||T)      GT:AD:DP:GQ:PL  1/1:7,2:9:6:63,6,0      1/1:0,16:16:15:158,15,01/1:0,16:16:15:158,15,0  1/1:0,16:16:15:158,15,0 1/1:0,16:16:15:158,15,0
 
-The ``snzl`` strict candidate pipeline is run.
+The ``snzl`` ``strict candidate`` pipeline is run.
 
 .. code:: shell
 
@@ -332,9 +348,9 @@ The ``snzl`` strict candidate pipeline is run.
          - candidate_snp -csm ${sample_name} \
          snpeff -sem ${sample_name} -see EFF -semi MODERATE
 
-We expect that all strict candidates will be retained and all non-strict candidates discarded.
+We expect that all ``strict candidates`` will be retained and all ``non-strict candidates`` discarded.
 
-Instead, all non-strict candidates were retained and all strict candidates were discarded::
+Instead, all ``non-strict candidates`` were retained and all ``strict candidates`` were discarded::
 
    grep -v '#' test_snp_out.vcf | grep -P './.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.' | wc -l
    # 0
@@ -350,7 +366,7 @@ Next, both the tests are combined. ``test_snp.vcf.gz`` entries are duplicated an
    bgzip test_snp_dp.vcf
    bcftools index -t test_snp_dp.vcf.gz
 
-The ``snzl`` strict candidate pipeline is run.
+The ``snzl`` ``strict candidate`` pipeline is run.
 
 .. code:: shell
 
@@ -364,6 +380,31 @@ The ``snzl`` strict candidate pipeline is run.
       snzl --no-filtered --output ${outfile_path} \
          - candidate_snp -csm ${sample_name} \
          snpeff -sem ${sample_name} -see EFF -semi MODERATE
+
+We expect that all ``strict candidates`` will be retained passing a ``read depth`` threshold and all ``non-strict candidates`` discarded. Instead all ``non-strict candidates`` were retained regardless of ``read depth``.::
+
+   grep -v '#' test_dp_out.vcf | wc -l
+   # get 8 lines detected, all non-strict and full range of read depths
+
+Test ``snzl`` strict candidate filtering
+****************************************
+
+Use the same file as above, but vary ``snzl`` settings.
+
+.. code-block:: shell
+
+   infile_path="test_snp_dp.vcf.gz"
+   outfile_path="test_snp_dp_csm_out.vcf"
+   sample_name="TL2312073-163-4L-MAN-20231116"
+   chromosome="chr24"
+
+   # see only 2 alleles (not sure what cases would result in >2 in zebrafish)
+   bcftools view --max-alleles 2 ${infile_path} ${chromosome} | \
+      snzl --no-filtered --output ${outfile_path} \
+         - candidate_snp -css -csm ${sample_name} \
+         snpeff -sem ${sample_name} -see EFF -semi MODERATE
+
+We expect ``strict candidate`` entries to be returned, but instead no entries are returned. Upscaling this test to a full sample had the same result (not shown for size reasons).
 
 
 .. raw:: html
