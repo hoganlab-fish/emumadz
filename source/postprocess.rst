@@ -126,8 +126,9 @@ For an example on all samples:
 
 .. code-block:: shell
 
+    metadata="../data/samplesheet_postprocess.tsv"
     map="../data/chrom_table.tsv"
-    tail -n +2 ../data/samplesheet_postprocess.tsv | \
+    tail -n +2 ${metadata} | \
         while IFS="\t" read -r line; do
             in=$(echo $line | cut -d ' ' -f3)
             out="../results/VCF_ChrFixed/"$(basename ${in})
@@ -135,6 +136,20 @@ For an example on all samples:
                 ${in} -Ob -o ${out}
             bcftools index -t ${out}
         done
+
+
+Merge files with refs
++++++++++++++++++++++
+
+For each sample, merge the four references:
+- TL2209397-ENUref-Female.vcf.gz
+- TL2209398-ENUref-Male.vcf.gz
+- TL2209399-TUref-Female.vcf.gz
+- TL2209400-TUref-Male.vcf.gz
+
+.. code-block:: shell
+
+    bcftools merge
 
 
 Filter out non-snps
