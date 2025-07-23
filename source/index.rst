@@ -31,6 +31,7 @@ Contains the documentation for our custom zebrafish whole genome sequencing pipe
    intro
    install
    quickstart
+   postprocess
 
 
 Indices and tables
