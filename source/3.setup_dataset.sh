@@ -2,6 +2,7 @@
 # setup new IO directory structure based on original input samplesheet
 SAMPLESHEET_ORIGINAL="../data/samplesheet_original.tsv"
 SAMPLESHEET_NEW="../data/samplesheet_new.tsv"
+SAMPLESHEET_VCF="../data/samplesheet_postprocess.tsv"
 ALN_DIR="../data/Alignment_File/"
 VCF_DIR="../data/VCF_Original/"
 SRC_DIR="../source/"
@@ -82,6 +83,19 @@ make_samplesheet() {
     fi
 }
 
+make_samplesheet_postprocess() {
+    if [ ! -f "${SAMPLESHEET_VCF}" ]; then
+        printf "Sample_Identity\tAlignment_File\tVCF_Original\tVCF_Merged\tVCF_ChrFixed\tVCF_Annotated\tVCF_Candidates\tSnzl_NoGaps_NBases\tSnzl_NoGaps_NSnps\tSnzl_WithGaps_NBases\tSnzl_WithGaps_NSnps\tJson\tSample_Short\n" > ${SAMPLESHEET_VCF}
+        for i in $(cut -f13 ${SAMPLESHEET_ORIGINAL} | grep -v 'Sample_Short'); do
+            printf "${i}\t../data/Alignment_File/${i}.bam\t../data/VCF_Original/${i}.vcf.gz\t\t\t\t\t\t\t\t\t\t${i}\n" >> ${SAMPLESHEET_VCF}
+        done    
+    else
+        for i in $(cut -f13 ${SAMPLESHEET_ORIGINAL} | grep -v 'Sample_Short'); do
+            printf "${i}\t../data/Alignment_File/${i}.bam\t../data/VCF_Original/${i}.vcf.gz\t\t\t\t\t\t\t\t\t\t${i}\n" >> ${SAMPLESHEET_VCF}
+        done
+    fi    
+}
+
 main() {
     copy_bams
     rename_bams
@@ -89,7 +103,8 @@ main() {
     index_vcfs
     rename_vcfs
     make_outdirs
-    make_samplesheet    
+    make_samplesheet
+    make_samplesheet_postprocess 
 }
 
 main
