@@ -5,6 +5,8 @@
 *out
 *slurm
 *vcf
+*vcf.gz
+*vcf.gz.tbi
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
