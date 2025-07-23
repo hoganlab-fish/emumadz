@@ -3,6 +3,7 @@
 SAMPLESHEET_ORIGINAL="../data/samplesheet_original.tsv"
 SAMPLESHEET_NEW="../data/samplesheet_new.tsv"
 ALN_DIR="../data/Alignment_File/"
+VCF_DIR="../data/VCF_Original/"
 SRC_DIR="../source/"
 
 copy_bams () {
@@ -14,6 +15,37 @@ copy_bams () {
         cp ${i} ${ALN_DIR};
         cp ${i/bam/bai} ${ALN_DIR};
     done
+}
+
+copy_vcfs () {
+    # input goes here
+    mkdir -p ${VCF_DIR}
+
+    # copy files over to specified data dir
+    for i in $(cut -f3 ${SAMPLESHEET_ORIGINAL} | grep -v 'VCF_Original'); do
+        cp ${i} ${VCF_DIR};
+    done
+}
+
+index_vcfs () {
+    for i in ${VCF_DIR}/*vcf; do
+        bgzip ${i};
+    done
+    for i in ${VCF_DIR}/*vcf.gz; do
+        bcftools index -t ${i}
+    done
+}
+
+rename_vcfs() {
+    # long names get truncated by some pipeline modules, shorten first
+    cd ${VCF_DIR}
+    for vcf in *vcf.gz; do
+        ln -s $(basename ${vcf}) $(basename $vcf | cut -d '-' -f1-3).vcf.gz
+    done
+    for tbi in *vcf.gz.tbi; do
+        ln -s $(basename ${tbi}) $(basename $tbi | cut -d '-' -f1-3).vcf.gz.tbi
+    done
+    cd ${SRC_DIR}
 }
 
 rename_bams() {
@@ -53,6 +85,9 @@ make_samplesheet() {
 main() {
     copy_bams
     rename_bams
+    copy_vcfs
+    index_vcfs
+    rename_vcfs
     make_outdirs
     make_samplesheet    
 }
