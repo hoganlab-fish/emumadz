@@ -174,3 +174,21 @@ Filter by snp impact
 ++++++++++++++++++++
 
     can just grep, dont need SnpSift
+
+TEMP
+++++
+
+Quick, unrefined way to pull out strict candidates for reference only. Not to be considered as final results!
+
+.. code-block:: shell
+
+    outdir="../results/tmp/"
+    pattern='#|./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.$'
+    metadata="../data/samplesheet_original.tsv"
+    mkdir -p ${outdir}
+    cut -f6 ${metadata} | tail -n +6 | \
+        while IFS="\t" read -r line; do
+            in=$(echo $line | cut -d ' ' -f3)
+            out="${outdir}$(basename ${in} | cut -d '-' -f1-3).vcf"
+            bgzip -cd ${in} | grep -P ${pattern} > ${out}
+        done
