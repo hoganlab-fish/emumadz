@@ -321,8 +321,8 @@ The ``snzl`` strict candidate pipeline is run.
 
 .. code:: shell
 
-   infile_path="test_snp_dp.vcf.gz"
-   outfile_path="foo.vcf"
+   infile_path="test_snp.vcf.gz"
+   outfile_path="test_snp_out.vcf"
    sample_name="TL2312073-163-4L-MAN-20231116"
    chromosome="chr24"
 
@@ -354,8 +354,8 @@ The ``snzl`` strict candidate pipeline is run.
 
 .. code:: shell
 
-   infile_path="test_snp.vcf.gz"
-   outfile_path="test_snp_out.vcf"
+   infile_path="test_snp_dp.vcf.gz"
+   outfile_path="test_snp_dp_out.vcf"
    sample_name="TL2312073-163-4L-MAN-20231116"
    chromosome="chr24"
 
