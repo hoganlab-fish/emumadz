@@ -117,7 +117,9 @@ For one example:
 
 .. code-block:: shell
 
-    bcftools annotate --rename-chr "../data/chrom_table.tsv" \
+    THREADS=16
+    bcftools annotate --threads ${THREADS} \
+        --rename-chr "../data/chrom_table.tsv" \
         ../data/VCF_Original/TL2312073-163-4L.vcf.gz \
         -Ob -o ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz
     bcftools index -t ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz
@@ -126,17 +128,24 @@ For an example on all samples:
 
 .. code-block:: shell
 
+    THREADS=16
     metadata="../data/samplesheet_postprocess.tsv"
     map="../data/chrom_table.tsv"
     tail -n +2 ${metadata} | \
         while IFS="\t" read -r line; do
             in=$(echo $line | cut -d ' ' -f3)
             out="../results/VCF_ChrFixed/"$(basename ${in})
-            bcftools annotate --rename-chrs ${map} \
+            bcftools annotate \
+                --threads ${THREADS} \
+                --rename-chrs ${map} \
                 ${in} -Ob -o ${out}
             bcftools index -t ${out}
         done
 
+Filter out non-snps
++++++++++++++++++++
+
+bcftools
 
 Merge files with refs
 +++++++++++++++++++++
@@ -147,15 +156,43 @@ For each sample, merge the four references:
 - TL2209399-TUref-Female.vcf.gz
 - TL2209400-TUref-Male.vcf.gz
 
+For one example:
+
 .. code-block:: shell
 
-    bcftools merge
+    THREADS=16
+    REF_PATHS="../results/VCF_ChrFixed/TL2209397-ENUref-Female.vcf.gz
+    ../results/VCF_ChrFixed/TL2209398-ENUref-Male.vcf.gz
+    ../results/VCF_ChrFixed/TL2209399-TUref-Female.vcf.gz
+    ../results/VCF_ChrFixed/TL2209400-TUref-Male.vcf.gz"
 
+    bcftools merge --threads ${THREADS} \
+        ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz ${REF_PATHS} \
+        -Ob -o ../results/VCF_Merged/TL2312073-163-4L.merged.vcf.gz
+    bcftools index --threads ${THREADS} -t \
+        ../results/VCF_Merged/TL2312073-163-4L.merged.vcf.gz
 
-Filter out non-snps
-+++++++++++++++++++
+For an example on all samples:
 
-bcftools
+.. code-block:: shell
+
+    THREADS=16
+    INFILE_DIR="../results/VCF_ChrFixed/*gz"
+    OUTFILE_DIR="../results/VCF_Snps/"
+    REF_PATHS="../results/VCF_ChrFixed/TL2209397-ENUref-Female.vcf.gz
+    ../results/VCF_ChrFixed/TL2209398-ENUref-Male.vcf.gz
+    ../results/VCF_ChrFixed/TL2209399-TUref-Female.vcf.gz
+    ../results/VCF_ChrFixed/TL2209400-TUref-Male.vcf.gz"
+
+    find ${INFILE_DIR} | grep -v 'ref' | \
+        while IFS="\t" read -r line; do
+            in=$(echo $line)
+            out=${OUTFILE_DIR}$(basename ${in})
+            bcftools merge --threads ${THREADS} \
+                ${in} ${REF_PATHS} -Ob -o ${out}
+            bcftools index --threads ${THREADS} -t ${out}
+        done
+
 
 Get strict candidates
 +++++++++++++++++++++
