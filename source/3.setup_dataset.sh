@@ -85,13 +85,13 @@ make_samplesheet() {
 
 make_samplesheet_postprocess() {
     if [ ! -f "${SAMPLESHEET_VCF}" ]; then
-        printf "Sample_Identity\tAlignment_File\tVCF_Original\tVCF_Merged\tVCF_ChrFixed\tVCF_Annotated\tVCF_Candidates\tSnzl_NoGaps_NBases\tSnzl_NoGaps_NSnps\tSnzl_WithGaps_NBases\tSnzl_WithGaps_NSnps\tJson\tSample_Short\n" > ${SAMPLESHEET_VCF}
+        printf "Sample_Identity\tAlignment_File\tVCF_Original\tVCF_Merged\tVCF_Snps\tVCF_ChrFixed\tVCF_Annotated\tVCF_Candidates\tSnzl_NoGaps_NBases\tSnzl_NoGaps_NSnps\tSnzl_WithGaps_NBases\tSnzl_WithGaps_NSnps\tJson\tSample_Short\n" > ${SAMPLESHEET_VCF}
         for i in $(cut -f13 ${SAMPLESHEET_ORIGINAL} | grep -v 'Sample_Short'); do
-            printf "${i}\t../data/Alignment_File/${i}.bam\t../data/VCF_Original/${i}.vcf.gz\t\t\t\t\t\t\t\t\t\t${i}\n" >> ${SAMPLESHEET_VCF}
+            printf "${i}\t../data/Alignment_File/${i}.bam\t../data/VCF_Original/${i}.vcf.gz\t\t\t\t\t\t\t\t\t\t\t${i}\n" >> ${SAMPLESHEET_VCF}
         done    
     else
         for i in $(cut -f13 ${SAMPLESHEET_ORIGINAL} | grep -v 'Sample_Short'); do
-            printf "${i}\t../data/Alignment_File/${i}.bam\t../data/VCF_Original/${i}.vcf.gz\t\t\t\t\t\t\t\t\t\t${i}\n" >> ${SAMPLESHEET_VCF}
+            printf "${i}\t../data/Alignment_File/${i}.bam\t../data/VCF_Original/${i}.vcf.gz\t\t\t\t\t\t\t\t\t\t\t${i}\n" >> ${SAMPLESHEET_VCF}
         done
     fi    
 }
