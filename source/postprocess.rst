@@ -142,10 +142,6 @@ For an example on all samples:
             bcftools index -t ${out}
         done
 
-Filter out non-snps
-+++++++++++++++++++
-
-bcftools
 
 Merge files with refs
 +++++++++++++++++++++
@@ -178,7 +174,7 @@ For an example on all samples:
 
     THREADS=16
     INFILE_DIR="../results/VCF_ChrFixed/*gz"
-    OUTFILE_DIR="../results/VCF_Snps/"
+    OUTFILE_DIR="../results/VCF_Merged/"
     REF_PATHS="../results/VCF_ChrFixed/TL2209397-ENUref-Female.vcf.gz
     ../results/VCF_ChrFixed/TL2209398-ENUref-Male.vcf.gz
     ../results/VCF_ChrFixed/TL2209399-TUref-Female.vcf.gz
@@ -193,6 +189,36 @@ For an example on all samples:
             bcftools index --threads ${THREADS} -t ${out}
         done
 
+Filter out non-SNPs
++++++++++++++++++++
+
+For one example:
+
+.. code-block:: shell
+
+    THREADS=16
+    bcftools view --threads ${THREADS} -i 'TYPE="snp"' \
+        ../results/VCF_Merged/TL2312073-163-4L.vcf.gz \
+        -Ob -o ../results/VCF_SNPs/TL2312073-163-4L.vcf.gz
+    bcftools index --threads ${THREADS} -t \
+        ../results/VCF_SNPs/TL2312073-163-4L.vcf.gz
+
+For an example on all samples:
+
+.. code-block:: shell
+
+    THREADS=16
+    INFILE_DIR="../results/VCF_Merged/*gz"
+    OUTFILE_DIR="../results/VCF_Snps/"
+
+    find ${INFILE_DIR} | sort | \
+        while IFS="\t" read -r line; do
+            in=$(echo $line)
+            out=${OUTFILE_DIR}$(basename ${in})
+            bcftools view --threads ${THREADS} \
+                -i 'TYPE="snp"' ${in} -Ob -o ${out}
+            bcftools index --threads ${THREADS} -t ${out}
+        done
 
 Get strict candidates
 +++++++++++++++++++++
