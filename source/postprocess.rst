@@ -199,7 +199,7 @@ For one example:
     THREADS=16
     bcftools view --threads ${THREADS} -i 'TYPE="snp"' \
         ../results/VCF_Merged/TL2312073-163-4L.vcf.gz \
-        -Ob -o ../results/VCF_SNPs/TL2312073-163-4L.vcf.gz
+        -Ob -o ../results/VCF_Snps/TL2312073-163-4L.vcf.gz
     bcftools index --threads ${THREADS} -t \
         ../results/VCF_SNPs/TL2312073-163-4L.vcf.gz
 
@@ -220,18 +220,79 @@ For an example on all samples:
             bcftools index --threads ${THREADS} -t ${out}
         done
 
-Get strict candidates
-+++++++++++++++++++++
+Obtain SNPs which occur in the sample but not the references
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.. note::
+    To be refined. Cannot just obtain all missing snps in refs. e.g:
+        - Reference allele may be A
+        - Grandparents may be C
+        - Mutant may be G
+
+.. Candidate criteria:
+..     1. The mutant must be covered to a depth of >= 1 read
+..     2. At least one of the unaffected sibling or other samples must be \
+..     covered to a depth of >= 1 read
+..     3. If the mutant and sibling have a single allele, it must not be \
+..     the same in both
+..     4. The mutant must have a majority allele that is:
+..         a. not the majority allele in any of the 'other' samples'''
+
+.. The criteria necessary:
+..     1. Mutant is homozygous
+..     2. All of the 'other' samples are called
+..     3. Mutant allele is not present in any of the 'other' samples
+
+Ideally we only should include samples homozygous for the SNPs. However, false heterozygotes appear in the data due to reads with low mapping quality introducing false heterozygoisty. Therefore, this filter is intentionally relaxed to accommodate heterozygotes. The information can be verified by inspecting the ``bam`` file directly.
+
+For one example:
 
 .. code-block:: shell
 
-    grep -P './.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.$'
+    THREADS=16
+    bcftools view --threads ${THREADS} \
+        -i 'GT[0]="hom" && F_MISSING=0.8 || GT[0]="het" && F_MISSING=0.8' \
+        ../results/VCF_Snps/TL2312073-163-4L.vcf.gz \
+        -Ob -o ../results/VCF_Candidates/TL2312073-163-4L.vcf.gz
+
+To verify that the conditional statements are formulated correctly and that this returns expected results:
+
+.. code-block:: shell
+
+    # both return the same line count of 1481032
+    THREADS=16
+    bcftools view --threads ${THREADS} \
+        -i 'GT[0]="hom" && F_MISSING=0.8 || GT[0]="het" && F_MISSING=0.8' \
+        ../results/VCF_Snps/TL2312073-163-4L.vcf.gz | \
+        grep -v '#' | wc -l
+    bcftools view --threads ${THREADS}\
+        -i 'GT[0]="hom" && F_MISSING=0.8 || GT[0]="het" && F_MISSING=0.8' \
+        ../results/VCF_Snps/TL2312073-163-4L.vcf.gz | \
+        grep -Pc './.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.$'
+
+For an example on all samples:
+
+.. code-block:: shell
+
+    THREADS=16
+    INFILE_DIR="../results/VCF_Snps/*gz"
+    OUTFILE_DIR="../results/VCF_Candidates/"
+
+    find ${INFILE_DIR} | sort | \
+        while IFS="\t" read -r line; do
+            in=$(echo $line)
+            out=${OUTFILE_DIR}$(basename ${in})
+            bcftools view --threads ${THREADS} \
+                -i 'GT[0]="hom" && F_MISSING=0.8 || GT[0]="het" && F_MISSING=0.8' \
+                ${in} -Ob -o ${out}
+            bcftools index --threads ${THREADS} -t ${out}
+        done
 
 
 Filter by read depth
 ++++++++++++++++++++
 
-    awk DP with threshold filter
+*Not intended to be carried out for this experiment*
 
 Filter by snp impact
 ++++++++++++++++++++
