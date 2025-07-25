@@ -223,25 +223,8 @@ For an example on all samples:
 Obtain SNPs which occur in the sample but not the references
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-.. note::
-    To be refined. Cannot just obtain all missing snps in refs. e.g:
-        - Reference allele may be A
-        - Grandparents may be C
-        - Mutant may be G
-
-.. Candidate criteria:
-..     1. The mutant must be covered to a depth of >= 1 read
-..     2. At least one of the unaffected sibling or other samples must be \
-..     covered to a depth of >= 1 read
-..     3. If the mutant and sibling have a single allele, it must not be \
-..     the same in both
-..     4. The mutant must have a majority allele that is:
-..         a. not the majority allele in any of the 'other' samples'''
-
-.. The criteria necessary:
-..     1. Mutant is homozygous
-..     2. All of the 'other' samples are called
-..     3. Mutant allele is not present in any of the 'other' samples
+Unrefined implementation (works only if grandparents have the reference allele)
+*******************************************************************************
 
 Ideally we only should include samples homozygous for the SNPs. However, false heterozygotes appear in the data due to reads with low mapping quality introducing false heterozygoisty. Therefore, this filter is intentionally relaxed to accommodate heterozygotes. The information can be verified by inspecting the ``bam`` file directly.
 
@@ -288,6 +271,95 @@ For an example on all samples:
             bcftools index --threads ${THREADS} -t ${out}
         done
 
+.. note::
+    To be refined. Cannot just obtain all missing snps in refs. e.g:
+        - Reference allele may be A
+        - Grandparents may be C
+        - Mutant may be G
+
+Refined implementation (works if grandparents have the reference allele)
+************************************************************************
+
+Candidate criteria:
+    1. The mutant must be covered to a depth of >= 1 read
+    2. At least one of the unaffected sibling or other samples must be \
+    covered to a depth of >= 1 read
+    3. If the mutant and sibling have a single allele, it must not be \
+    the same in both
+    4. The mutant must have a majority allele that is:
+        a. not the majority allele in any of the 'other' samples'''
+
+Strict candidate criteria:
+    1. Mutant is homozygous
+    2. All of the 'other' samples are called
+    3. Mutant allele is not present in any of the 'other' samples
+
+
+Modular bcftools-native implementation (pseudocode):
+
+.. code-block:: python
+
+    # 1. Check that mutant is called (covered by at least one read)
+    if not GT[mutant_id].called:
+        return False
+
+    # 2. Check at least one of the unaffected sibling or other samples is called
+    if sibling_id is not None:
+        if (not GT[sibling_id].called) and (no other GTs are called):
+        return False
+    else:
+        if (no other GTs are called):
+        return False
+
+    # 3. If both mutant and sibling are called and homozygous, their alleles must differ
+    if sibling_id is not None and GT[sibling_id].called:
+        if is_homozygous(GT[mutant_id]) and is_homozygous(GT[sibling_id]):
+        if most_abundant_allele(GT[mutant_id]) == most_abundant_allele(GT[sibling_id]):
+            return False
+
+    # 4. The mutant's majority allele must not be the majority allele in any 'other' sample
+    mutant_major_allele = most_abundant_allele(GT[mutant_id])
+    for sample in samples:
+        if sample not in [mutant_id, sibling_id] + exclude_ids:
+        if GT[sample].called:
+            if most_abundant_allele(GT[sample]) == mutant_major_allele:
+            return False
+
+    return True
+
+    # Helper functions (bcftools plugin C API):
+    # - is_homozygous: check if GT is hom (both alleles same and called)
+    # - most_abundant_allele: get allele with max AD for sample
+    # Use bcf_get_genotypes, bcf_get_format_int32, etc.
+
+Strict candidate modular bcftools-native implementation (pseudocode):
+
+.. code-block:: python
+
+    # 1. Check if mutant is homozygous
+    if (GT[mutant_id] is not called) or (not is_homozygous(GT[mutant_id])):
+        return False
+
+    # 2. Check all 'other' samples are called
+    for sample in samples:
+        if sample not in [mutant_id, unaffected_sibling_id] + exclude_ids:
+        if GT[sample] is not called:
+            return False
+
+    # 3. Check mutant allele is not present in any 'other' sample
+    mutant_allele = most_abundant_allele(GT[mutant_id])
+    for sample in samples:
+        if sample not in [mutant_id, unaffected_sibling_id] + exclude_ids:
+        if mutant_allele in alleles_with_depth(GT[sample]):
+            return False
+
+    return True
+
+    # Helper functions (bcftools plugin C API):
+    # - is_homozygous: check if GT is hom (both alleles same and called)
+    # - most_abundant_allele: get allele with max AD for sample
+    # - alleles_with_depth: alleles with AD > 0
+    # Use bcf_get_genotypes, bcf_get_format_int32, etc.    
 
 Filter by read depth
 ++++++++++++++++++++
