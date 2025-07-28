@@ -176,11 +176,13 @@ For an example on all samples:
             bcftools annotate \
                 --threads ${THREADS} \
                 --rename-chrs ${CHR_MAP} \
+                ${in} | \
             grep -v '##contig=<ID=FR' | \
             bgzip -c > ${out}
             bcftools index -t ${out}
-        done
-
+            chgrp -R hogan_lab_bioinf ${out}*
+        done     
+        
 Normalise VCF files
 +++++++++++++++++++
 
