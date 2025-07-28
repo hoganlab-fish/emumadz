@@ -90,8 +90,8 @@ Four samplesheet files are generated:
 
 The ``samplesheet.220701_A01221_0125_BHCCHNDMXY.tsv`` contains ``F0`` grandparent reference generation metadata. All other samplesheets contain ``F2`` generation metadata. ``samplesheet_original.tsv`` contains these legacy file paths.
 
-For postprocessing
-##################
+For postprocessing (steps not carried out)
+##########################################
 
 ``3.setup_dataset.sh`` copies ``bam`` alignment files and ``vcf`` variant calling files over from their specified locations in ``samplesheet_original.tsv`` to ``data/Alignment_File`` and ``data/VCF_Original`` respectively. We generate ``samplesheet_postprocess.tsv`` for use in this postprocessing analysis.
 
@@ -105,23 +105,55 @@ Variant calling
 
 *The ``gatk`` variant calling step is not covered in this documentation. The pipeline starts from the variant calling files*
 
-Postprocessing VCF
-++++++++++++++++++
+For postprocessing (steps carried out)
+######################################
 
-Rename chromosomes in vcf with map file
-+++++++++++++++++++++++++++++++++++++++
+Rename chromosomes in fasta file with map file
+++++++++++++++++++++++++++++++++++++++++++++++
 
 ``data/chrom_table.tsv`` contains the chromosome name mappings. Use this to remap the chromosomes.
+
+.. code-block:: shell
+
+    module load samtools
+
+    REF_GEN="../data/Reference/GCA_000002035.2_Zv9_genomic.fna"
+    CHR_MAP="../data/chrom_table.tsv"
+    OUT_GEN="../data/Reference/GCA_000002035.2_Zv9_genomic.ChrFixed.fna"
+
+    {
+        while read seqname length rest; do
+            if grep -q "^${seqname}" ${CHR_MAP}; then
+                newname=$(awk -v seq="$seqname" '$1==seq {print $2}' ${CHR_MAP})
+                samtools faidx ${REF_GEN} "$seqname" | sed "s/^>$seqname/>$newname/"
+            else
+                samtools faidx ${REF_GEN} "$seqname"
+            fi
+        done < ${REF_GEN}.fai
+    } > ${OUT_GEN}
+
+Rename chromosomes in vcf with map file, and discard non-chromosomes
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+``data/chrom_table.tsv`` contains the chromosome name mappings. Use this to remap the chromosomes.
+
+At the same time, we are only interested in the chromosomes, which start with ``chr`` and go from ``chr1`` to ``chr25``. So we discard all other contigs (including from the header).
 
 For one example:
 
 .. code-block:: shell
 
     THREADS=16
+    # 33550336
+    for i in {1..25}; do 
+        echo -e "chr${i}\t1\t1111111111111000000000000"
+    done > ../data/chromosomes_only.txt
+
     bcftools annotate --threads ${THREADS} \
         --rename-chr "../data/chrom_table.tsv" \
-        ../data/VCF_Original/TL2312073-163-4L.vcf.gz \
-        -Ob -o ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz
+        ../data/VCF_Original/TL2312073-163-4L.vcf.gz | \
+    grep -v '##contig=<ID=FR' | \
+    bgzip -c ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz
     bcftools index -t ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz
 
 For an example on all samples:
@@ -130,16 +162,58 @@ For an example on all samples:
 
     THREADS=16
     metadata="../data/samplesheet_postprocess.tsv"
-    map="../data/chrom_table.tsv"
+    CHR_MAP="../data/chrom_table.tsv"
+    CHR_FIL="../data/chromosomes_only.txt"
+    # 33550336
+    for i in {1..25}; do 
+        echo -e "chr${i}\t1\t1111111111111000000000000"
+    done > ../data/chromosomes_only.txt
+
     tail -n +2 ${metadata} | \
         while IFS="\t" read -r line; do
             in=$(echo $line | cut -d ' ' -f3)
             out="../results/VCF_ChrFixed/"$(basename ${in})
             bcftools annotate \
                 --threads ${THREADS} \
-                --rename-chrs ${map} \
-                ${in} -Ob -o ${out}
+                --rename-chrs ${CHR_MAP} \
+            grep -v '##contig=<ID=FR' | \
+            bgzip -c > ${out}
             bcftools index -t ${out}
+        done
+
+Normalise VCF files
++++++++++++++++++++
+
+For one example:
+
+.. code-block:: shell
+
+    # $REF_GEN is the previous $OUT_GEN, with fixed chromosome names
+    REF_GEN="../data/Reference/GCA_000002035.2_Zv9_genomic.ChrFixed.fna"
+    THREADS=16
+    bcftools norm --threads ${THREADS} -m-both -f ${REF_GEN} \
+        ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz \
+        -Ob -o ../results/VCF_Norm/TL2312073-163-4L.vcf.gz
+    bcftools index --threads ${THREADS} -t \
+        ../results/VCF_Norm/TL2312073-163-4L.vcf.gz
+
+For an example on all samples:
+
+.. code-block:: shell
+
+    # $REF_GEN is the previous $OUT_GEN, with fixed chromosome names
+    REF_GEN="../data/Reference/GCA_000002035.2_Zv9_genomic.ChrFixed.fna"
+    THREADS=16
+    INFILE_DIR="../results/VCF_ChrFixed/*gz"
+    OUTFILE_DIR="../results/VCF_Norm/"
+
+    find ${INFILE_DIR} | sort | \
+        while IFS="\t" read -r line; do
+            in=$(echo $line)
+            out=${OUTFILE_DIR}$(basename ${in})
+            bcftools norm --threads ${THREADS} -m-both \
+                -f ${REF_GEN} ${in} -Ob -o ${out}
+            bcftools index --threads ${THREADS} -t ${out}
         done
 
 
@@ -164,7 +238,7 @@ For one example:
 
     bcftools merge --threads ${THREADS} \
         ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz ${REF_PATHS} \
-        -Ob -o ../results/VCF_Merged/TL2312073-163-4L.merged.vcf.gz
+        -Ob -o ../results/VCF_Merged/TL2312073-163-4L.vcf.gz
     bcftools index --threads ${THREADS} -t \
         ../results/VCF_Merged/TL2312073-163-4L.merged.vcf.gz
 
@@ -280,12 +354,19 @@ For an example on all samples:
 Refined implementation (works if grandparents have the reference allele)
 ************************************************************************
 
+``vcf`` file specifications:
+- We have a multisample vcf file
+- The first sample is the mutant
+- The remaining 4 samples are the grandparent `F0` samples used as a reference
+- Each sample is the result of variant calling against the primary reference genome
+
+Original claimed criteria
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
 Candidate criteria:
     1. The mutant must be covered to a depth of >= 1 read
-    2. At least one of the unaffected sibling or other samples must be \
-    covered to a depth of >= 1 read
-    3. If the mutant and sibling have a single allele, it must not be \
-    the same in both
+    2. At least one of the unaffected sibling or other samples must be covered to a depth of >= 1 read
+    3. If the mutant and sibling have a single allele, it must not be the same in both
     4. The mutant must have a majority allele that is:
         a. not the majority allele in any of the 'other' samples'''
 
@@ -294,8 +375,35 @@ Strict candidate criteria:
     2. All of the 'other' samples are called
     3. Mutant allele is not present in any of the 'other' samples
 
+Revised criteria
+^^^^^^^^^^^^^^^^
+
+Candidate criteria:
+    1. The mutant must be covered to a depth of >= 1 read
+    2. At least one of the other samples must be covered to a depth of >= 1 read
+    3. If the mutant and grandparent reference have a single allele, it must not be the same in both
+    4. The mutant must have a majority allele that is not the majority allele in any of the F0 references
+
+Strict candidate criteria:
+    1. Mutant is homozygous
+    2. All of the other F0 references are called
+    3. Mutant allele is not present in any of the other F0 references
 
 Modular bcftools-native implementation (pseudocode):
+
+.. code-block:: shell
+
+    THREADS=16
+    INFILE_DIR="../results/VCF_Snps/*gz"
+    OUTFILE_DIR="../results/VCF_Candidates/"
+
+    bcftools view  --threads ${THREADS} -i \
+        'FORMAT/DP[0]>=1 && (FORMAT/DP[1]>=1 || FORMAT/DP[2]>=1 || FORMAT/DP[3]>=1 || FORMAT/DP[4]>=1)' \
+        ../results/VCF_Snps/TL2312073-163-4L.vcf.gz | \        
+    bcftools view --threads ${THREADS} -i \
+        
+    # 3. If the mutant and grandparent reference have a single allele, it must not be the same in both
+    # 4. The mutant must have a majority allele that is not the majority allele in any of the references
 
 .. code-block:: python
 
