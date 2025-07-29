@@ -6,9 +6,9 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'whole_genome_sequencing'
-copyright = '2025, Tyrone Chen, Michelle Meier, Song Li, Richard Lupat'
-author = 'Tyrone Chen, Michelle Meier, Song Li, Richard Lupat'
+project = 'Zebrafish Enhanced Bioinformatics Resource Analysis For Identifying Spontaneous Hypermutation - Enhanced Nuclear Ultraviolet - Single Nucleotide Identification Pipeline for Experimental Research'
+copyright = '2025, Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Jason Li, Benjamin Hogan'
+author = 'Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Jason Li, Benjamin Hogan'
 release = '0.0.1'
 
 # -- General configuration ---------------------------------------------------

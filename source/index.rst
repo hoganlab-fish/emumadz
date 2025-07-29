@@ -1,5 +1,7 @@
-Whole genome sequencing pipeline
-================================
+ZEBRAFISH-ENU-SNIPER
+====================
+Zebrafish Enhanced Bioinformatics Resource Analysis For Identifying Spontaneous Hypermutation - Enhanced Nuclear Ultraviolet - Single Nucleotide Identification Pipeline for Experimental Research
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 .. whole_genome_sequencing documentation master file, created by
    sphinx-quickstart on Mon Jun 30 12:23:50 2025.
@@ -8,7 +10,7 @@ Whole genome sequencing pipeline
 
 .. raw:: html
 
-  Copyright (c) 2025 <a href="https://orcid.org/0000-0002-9207-0385">Tyrone Chen, <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a><a href="https://orcid.org/0000-0003-3746-0695">Oliver Yu, <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a><a href="https://orcid.org/0000-0002-0651-7065">Benjamin Hogan <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>.
+  Copyright (c) 2025 <a href="https://orcid.org/0000-0002-9207-0385">Tyrone Chen, <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a><a href="https://orcid.org/0000-0003-3746-0695">PLACEHOLDER, <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a><a href="https://orcid.org/0000-0002-0651-7065">Benjamin Hogan <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>.
 
 Code in this repository is provided under a `MIT license`_. This documentation is provided under a `CC-BY-3.0 AU license`_.
 
@@ -21,6 +23,8 @@ Code in this repository is provided under a `MIT license`_. This documentation i
 .. _Visit our lab website here.: https://biomedicalsciences.unimelb.edu.au/sbs-research-groups/anatomy-and-physiology-research/stem-cell-and-developmental-biology/hogan-laboratory-vascular-developmental-genetics-and-cell-biology
 
 .. _ben.hogan@petermac.org: mailto:ben.hogan@petermac.org
+
+We thank Richard Lupat and Jason Li from the Bioinformatics Core (RRID: SCR_025901) at Peter MacCallum Cancer Centre for their contributions to the pipeline.
 
 Contains the documentation for our custom zebrafish whole genome sequencing pipeline.
 
