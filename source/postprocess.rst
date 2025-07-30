@@ -182,7 +182,7 @@ For an example on all samples:
             bcftools index -t ${out}
             chgrp -R hogan_lab_bioinf ${out}*
         done     
-        
+
 Normalise VCF files
 +++++++++++++++++++
 
@@ -273,7 +273,7 @@ For one example:
 .. code-block:: shell
 
     THREADS=16
-    bcftools view --threads ${THREADS} -i 'TYPE="snp"' \
+    bcftools view --threads ${THREADS} -v snps \
         ../results/VCF_Merged/TL2312073-163-4L.vcf.gz \
         -Ob -o ../results/VCF_Snps/TL2312073-163-4L.vcf.gz
     bcftools index --threads ${THREADS} -t \
@@ -291,8 +291,8 @@ For an example on all samples:
         while IFS="\t" read -r line; do
             in=$(echo $line)
             out=${OUTFILE_DIR}$(basename ${in})
-            bcftools view --threads ${THREADS} \
-                -i 'TYPE="snp"' ${in} -Ob -o ${out}
+            bcftools view --threads ${THREADS} -v snps \
+                ${in} -Ob -o ${out}
             bcftools index --threads ${THREADS} -t ${out}
         done
 
@@ -301,6 +301,12 @@ Obtain SNPs which occur in the sample but not the references
 
 Unrefined implementation (works only if grandparents have the reference allele)
 *******************************************************************************
+
+.. raw:: html
+
+   <details>
+   <summary><a>This unrefined implementation is preserved for the record.</a></summary>
+
 
 Ideally we only should include samples homozygous for the SNPs. However, false heterozygotes appear in the data due to reads with low mapping quality introducing false heterozygoisty. Therefore, this filter is intentionally relaxed to accommodate heterozygotes. The information can be verified by inspecting the ``bam`` file directly.
 
@@ -353,6 +359,10 @@ For an example on all samples:
         - Grandparents may be C
         - Mutant may be G
 
+.. raw:: html
+
+   </details>
+
 Refined implementation (works if grandparents have the reference allele)
 ************************************************************************
 
@@ -361,6 +371,11 @@ Refined implementation (works if grandparents have the reference allele)
 - The first sample is the mutant
 - The remaining 4 samples are the grandparent `F0` samples used as a reference
 - Each sample is the result of variant calling against the primary reference genome
+
+.. raw:: html
+
+   <details>
+   <summary><a>Original criteria is preserved for the record.</a></summary>
 
 Original claimed criteria
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -377,8 +392,12 @@ Strict candidate criteria:
     2. All of the 'other' samples are called
     3. Mutant allele is not present in any of the 'other' samples
 
-Revised criteria
-^^^^^^^^^^^^^^^^
+Reworded criteria
+^^^^^^^^^^^^^^^^^
+
+.. raw:: html
+
+   </details>
 
 Candidate criteria:
     1. The mutant must be covered to a depth of >= 1 read
@@ -387,99 +406,64 @@ Candidate criteria:
     4. The mutant must have a majority allele that is not the majority allele in any of the F0 references
 
 Strict candidate criteria:
-    1. Mutant is homozygous
-    2. All of the other F0 references are called
-    3. Mutant allele is not present in any of the other F0 references
+    1. Find positions where F2 has a homozygous mutation
+    2. None of the F0s have that mutation
+    3. At least one F0 has coverage
 
-Modular bcftools-native implementation (pseudocode):
+Modular ``bcftools``-native implementation of *strict candidate criteria* filter for one sample:
 
 .. code-block:: shell
 
     THREADS=16
     INFILE_DIR="../results/VCF_Snps/*gz"
-    OUTFILE_DIR="../results/VCF_Candidates/"
+    OUTFILE_DIR="../results/VCF_Candidates_Strict/"
 
-    bcftools view  --threads ${THREADS} -i \
-        'FORMAT/DP[0]>=1 && (FORMAT/DP[1]>=1 || FORMAT/DP[2]>=1 || FORMAT/DP[3]>=1 || FORMAT/DP[4]>=1)' \
-        ../results/VCF_Snps/TL2312073-163-4L.vcf.gz | \        
-    bcftools view --threads ${THREADS} -i \
-        
-    # 3. If the mutant and grandparent reference have a single allele, it must not be the same in both
-    # 4. The mutant must have a majority allele that is not the majority allele in any of the references
+    # NOTE: for debugging purposes only
+    # are there 1/1 genotypes in the mutant
+    bcftools query -f '%CHROM:%POS[\t%GT]\n' SAMPLE.vcf | \
+        awk '$2=="1/1"' | wc -l
 
-.. code-block:: python
+    # check the range of genotypes of the mutant
+    bcftools query -f '%CHROM:%POS[\t%GT]\n' SAMPLE.vcf | \
+        cut -f2 | sort | uniq -c
 
-    # 1. Check that mutant is called (covered by at least one read)
-    if not GT[mutant_id].called:
-        return False
+    # GT[0]="1/1" == mutant is homozygous
+    #   position 1 is the sample, therefore mutation
+    # GT[1+]!~"1" == mutant allele is absent in any references
+    #   !~ == doesnt contain 1, 0/0 or ./ OK
+    # FORMAT/DP[1+]>=1 == at least one read hits one reference
+    #   at least 1 reference has read(s) mapped to the region
+    bcftools filter --threads ${THREADS} \
+        -i 'GT[0]="1/1" && GT[1]!~"1" && GT[2]!~"1" && GT[3]!~"1" && GT[4]!~"1" && (FORMAT/DP[1]>=1 || FORMAT/DP[2]>=1 || FORMAT/DP[3]>=1 || FORMAT/DP[4]>=1)' \
+        ../results/VCF_Snps/TL2312073-163-4L.vcf.gz \
+        -Ob -o ../results/VCF_Candidates_Strict/TL2312073-163-4L.vcf.gz
+    bcftools index --threads ${THREADS} -t \
+        ../results/VCF_Candidates_Strict/TL2312073-163-4L.vcf.gz
 
-    # 2. Check at least one of the unaffected sibling or other samples is called
-    if sibling_id is not None:
-        if (not GT[sibling_id].called) and (no other GTs are called):
-        return False
-    else:
-        if (no other GTs are called):
-        return False
+For an example on all samples:
 
-    # 3. If both mutant and sibling are called and homozygous, their alleles must differ
-    if sibling_id is not None and GT[sibling_id].called:
-        if is_homozygous(GT[mutant_id]) and is_homozygous(GT[sibling_id]):
-        if most_abundant_allele(GT[mutant_id]) == most_abundant_allele(GT[sibling_id]):
-            return False
+.. code-block:: shell
 
-    # 4. The mutant's majority allele must not be the majority allele in any 'other' sample
-    mutant_major_allele = most_abundant_allele(GT[mutant_id])
-    for sample in samples:
-        if sample not in [mutant_id, sibling_id] + exclude_ids:
-        if GT[sample].called:
-            if most_abundant_allele(GT[sample]) == mutant_major_allele:
-            return False
+    THREADS=16
+    INFILE_DIR="../results/VCF_Snps/*gz"
+    OUTFILE_DIR="../results/VCF_Candidates_Strict/"
 
-    return True
+    find ${INFILE_DIR} | sort | \
+        while IFS="\t" read -r line; do
+            in=$(echo $line)
+            out=${OUTFILE_DIR}$(basename ${in})
+            bcftools filter --threads ${THREADS} \
+                -i 'GT[0]="1/1" && GT[1]!~"1" && GT[2]!~"1" && GT[3]!~"1" && GT[4]!~"1" && (FORMAT/DP[1]>=1 || FORMAT/DP[2]>=1 || FORMAT/DP[3]>=1 || FORMAT/DP[4]>=1)' \
+                ${in} -Ob -o ${out}
+            bcftools index --threads ${THREADS} -t ${out}
+        done
 
-    # Helper functions (bcftools plugin C API):
-    # - is_homozygous: check if GT is hom (both alleles same and called)
-    # - most_abundant_allele: get allele with max AD for sample
-    # Use bcf_get_genotypes, bcf_get_format_int32, etc.
-
-Strict candidate modular bcftools-native implementation (pseudocode):
-
-.. code-block:: python
-
-    # 1. Check if mutant is homozygous
-    if (GT[mutant_id] is not called) or (not is_homozygous(GT[mutant_id])):
-        return False
-
-    # 2. Check all 'other' samples are called
-    for sample in samples:
-        if sample not in [mutant_id, unaffected_sibling_id] + exclude_ids:
-        if GT[sample] is not called:
-            return False
-
-    # 3. Check mutant allele is not present in any 'other' sample
-    mutant_allele = most_abundant_allele(GT[mutant_id])
-    for sample in samples:
-        if sample not in [mutant_id, unaffected_sibling_id] + exclude_ids:
-        if mutant_allele in alleles_with_depth(GT[sample]):
-            return False
-
-    return True
-
-    # Helper functions (bcftools plugin C API):
-    # - is_homozygous: check if GT is hom (both alleles same and called)
-    # - most_abundant_allele: get allele with max AD for sample
-    # - alleles_with_depth: alleles with AD > 0
-    # Use bcf_get_genotypes, bcf_get_format_int32, etc.    
-
-Filter by read depth
+Screen impact of SNP
 ++++++++++++++++++++
 
-*Not intended to be carried out for this experiment*
-
-Filter by snp impact
+Filter by SNP impact
 ++++++++++++++++++++
 
-    can just grep, dont need SnpSift
 
 TEMP
 ++++
