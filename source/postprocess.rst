@@ -90,23 +90,54 @@ Four samplesheet files are generated:
 
 The ``samplesheet.220701_A01221_0125_BHCCHNDMXY.tsv`` contains ``F0`` grandparent reference generation metadata. All other samplesheets contain ``F2`` generation metadata. ``samplesheet_original.tsv`` contains these legacy file paths.
 
-For postprocessing (steps not carried out)
-##########################################
-
 ``3.setup_dataset.sh`` copies ``bam`` alignment files and ``vcf`` variant calling files over from their specified locations in ``samplesheet_original.tsv`` to ``data/Alignment_File`` and ``data/VCF_Original`` respectively. We generate ``samplesheet_postprocess.tsv`` for use in this postprocessing analysis.
+
+.. raw:: html
+
+   <details>
+   <summary><a>This unrefined implementation is preserved for the record.</a></summary>
+
+
+New data setup
+++++++++++++++
+
+Create a samplesheet with sample identifiers, paths to bam file and the sample type::
+
+    sample_identity alignment_file  sample_type
+    some_sample_1   /path/to/1.bam  reference
+    some_sample_2   /path/to/2.bam  reference
+    some_sample_3   /path/to/3.bam  reference
+    some_sample_4   /path/to/4.bam  reference
+    some_sample_5   /path/to/5.bam  mutant
+    ...             ...             ...     
+
+In our case, this is how our table looks like:
+
+.. csv-table:: Example samplesheet for F0-F2 comparison
+   :file: tables/samplesheet.F0-F2.csv
+   :header-rows: 1
+
+Have the reference file on hand. This should be indexed as well.
+
+.. raw:: html
+
+   </details>
+
 
 Whole zebrafish genome assembly
 +++++++++++++++++++++++++++++++
 
-*The ``seqliner`` assembly step is not covered in this documentation. The pipeline starts from the variant calling files*
+*The ``seqliner`` assembly step is not covered in this documentation.*
 
-Variant calling
-+++++++++++++++
+Variant calling and read filtering
+++++++++++++++++++++++++++++++++++
 
-*The ``gatk`` variant calling step is not covered in this documentation. The pipeline starts from the variant calling files*
+We filter the ``bam`` files for low quality reads and perform variant calling simultaneously.
 
-For postprocessing (steps carried out)
-######################################
+.. code-block:: shell
+
+    module load samtools
+
 
 Rename chromosomes in fasta file with map file
 ++++++++++++++++++++++++++++++++++++++++++++++
@@ -460,6 +491,20 @@ For an example on all samples:
 
 Screen impact of SNP
 ++++++++++++++++++++
+
+We run ``snpEff`` to screen for SNPs which are predicted to be impactful. Annotations are added to the data in the process.
+
+.. warning:: 
+    ``snpEff`` runs on ``java``, and as a result may run into memory and other issues. You may need to set ``java`` memory flags accordingly.
+
+    .. code-block:: shell
+
+        # adjust max values accordingly
+        export JAVA_OPTIONS="-Xms512m -Xmx16g"
+
+.. code-block:: shell
+
+    snpEff -i vcf -v Zv9.75 TL2312073-163-4L.vcf.gz > bar.vcf
 
 Filter by SNP impact
 ++++++++++++++++++++
