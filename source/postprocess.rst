@@ -32,8 +32,13 @@ Usage
 Data setup
 ++++++++++
 
-Original data
-#############
+Original data (reference only)
+##############################
+
+.. raw:: html
+
+   <details>
+   <summary><a>Original data run preserved for the record.</a></summary>
 
 .. caution::
    The original data setup was sample-centric as opposed to more conventional process-centric directory structure. In addition, code had hardcoded paths which limited file movement. This impacted all steps of analysis and reduced reproducibility. To lower the impact of the original file layout, the data directory now contains samplesheets with updated file paths to symlinks and their attributes. However, it is possible that some errors remain.
@@ -94,12 +99,37 @@ The ``samplesheet.220701_A01221_0125_BHCCHNDMXY.tsv`` contains ``F0`` grandparen
 
 .. raw:: html
 
-   <details>
-   <summary><a>This unrefined implementation is preserved for the record.</a></summary>
+   </details>
 
+Data setup
+++++++++++
 
-New data setup
-++++++++++++++
+Software requirements:
+- bcftools
+- gatk
+- samtools
+- snpEff
+
+.. note::
+    Here we assume that ``bcftools,gatk,samtools,snpEff`` are all installed. Refer back to the installation instructions for how to install these.
+
+Data requirements:
+- Reference genome fasta file
+- Samplesheet with sample information
+- Chromosome name mappings
+
+Here is the directory structure::
+
+    project_root/
+    ├── source/         # Scripts are run from here
+    ├── data/           # Input data (BAM files, reference genome, samplesheet)
+    └── results/        # All output files organized by processing step
+        ├── 01_variant_calling/
+        ├── 02_filtering/
+        ├── 03_chromosome_filtering/
+        ├── 04_mutant_analysis/
+        ├── 05_annotation/
+        └── 06_final_results/
 
 Create a samplesheet with sample identifiers, paths to bam file and the sample type::
 
@@ -117,11 +147,43 @@ In our case, this is how our table looks like:
    :file: tables/samplesheet.F0-F2.csv
    :header-rows: 1
 
-Have the reference file on hand. This should be indexed as well.
+Here we setup the file structure and some other metadata.
 
-.. raw:: html
+.. code-block:: shell
 
-   </details>
+    # navigate to source directory
+    cd source/
+
+    # various configuration variables
+    THREADS=16
+    GATK_MEM="64g"
+    GATK_JAVA_OPTS="-Xmx${GATK_MEM} -XX:+UseParallelGC"
+
+    # paths relative to source directory
+    DATA_DIR="../data"
+    RESULTS_DIR="../results"
+    SAMPLESHEET="${DATA_DIR}/samplesheet.F0-F2.tsv"
+    REFERENCE_FA="${DATA_DIR}/Reference/GCA_000002035.2_Zv9_genomic.fna"
+
+    # create results directory structure
+    mkdir -p ${RESULTS_DIR}/{01_variant_calling,02_filtering,03_chromosome_filtering,04_mutant_analysis,05_annotation,06_final_results}
+
+Create some metadata files. The chromosome file maps the chromosome IDs onto the ``chr{1..25}`` more human-readable format. Have the ``fasta`` genome reference file on hand.
+
+.. code-block:: shell
+
+    # create chromosome list (adjust range as needed)
+    for i in {1..25}; do echo chr${i}; done > ${DATA_DIR}/chromosomes.txt
+
+    # verify reference genome preparation
+    if [[ ! -f "${REFERENCE_FA}.fai" ]]; then
+        echo "Creating FASTA index..."
+        samtools faidx ${REFERENCE_FA}
+    fi
+    if [[ ! -f "${REFERENCE_FA%.*}.dict" ]]; then
+        echo "Creating sequence dictionary..."
+        gatk CreateSequenceDictionary -R ${REFERENCE_FA}
+    fi
 
 
 Whole zebrafish genome assembly
@@ -136,8 +198,64 @@ We filter the ``bam`` files for low quality reads and perform variant calling si
 
 .. code-block:: shell
 
-    module load samtools
+    # this helper function retrieves bam file path given sample id
+    get_bam_path() {
+        local sample_id=$1
+        awk -v id="$sample_id" '$1==id {print $2}' ${SAMPLESHEET}
+    }
 
+    call_variants() {
+        local sample=$1
+        local sample_type=$2
+        local bam_path=$(get_bam_path $sample)
+        
+        echo "Processing ${sample_type}: $sample ($bam_path)"
+        
+        # Verify BAM file and index exist
+        if [[ ! -f "${bam_path}" ]]; then
+            echo "ERROR: BAM file not found: ${bam_path}"
+            return 1
+        fi
+        if [[ ! -f "${bam_path}.bai" ]]; then
+            echo "ERROR: BAM index not found: ${bam_path}.bai"
+            return 1
+        fi
+        
+        # gatk HaplotypeCaller with quality filters and threading
+        gatk --java-options "${GATK_JAVA_OPTS}" HaplotypeCaller \
+            -R ${REFERENCE_FA} \
+            -I ${bam_path} \
+            -O "${RESULTS_DIR}/01_variant_calling/${sample}_raw.vcf.gz" \
+            --minimum-mapping-quality 20 \
+            --base-quality-score-threshold 20 \
+            --standard-min-confidence-threshold-for-calling 30 \
+            --standard-min-confidence-threshold-for-emitting 10 \
+            --max-reads-per-alignment-start 50 \
+            --max-mnp-distance 1 \
+            --native-pair-hmm-threads ${THREADS} \
+            --verbosity INFO
+        
+        echo "Completed variant calling for ${sample_type}: $sample"        
+    }
+
+    # setup parallel runs
+    export -f call_variants
+    export REFERENCE_FA RESULTS_DIR GATK_JAVA_OPTS THREADS SAMPLESHEET
+
+    PARALLEL_JOBS=$(( THREADS / 2 ))
+    if [ $PARALLEL_JOBS -lt 1 ]; then PARALLEL_JOBS=1; fi
+
+    echo "Running ${PARALLEL_JOBS} parallel GATK jobs"
+
+    # Process mutant samples
+    printf '%s\n' "${MUTANT_SAMPLES[@]}" | \
+    parallel -j ${PARALLEL_JOBS} call_variants {} mutant
+
+    # Process reference samples
+    printf '%s\n' "${REFERENCE_SAMPLES[@]}" | \
+    parallel -j ${PARALLEL_JOBS} call_variants {} reference
+
+    echo "Variant calling completed for all samples"
 
 Rename chromosomes in fasta file with map file
 ++++++++++++++++++++++++++++++++++++++++++++++
