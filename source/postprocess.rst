@@ -1,4 +1,4 @@
-Quickstart
+BAM to SNP
 ==========
 
 .. whole_genome_sequencing documentation master file, created by
@@ -125,7 +125,7 @@ Here is the directory structure::
     ├── data/           # Input data (BAM files, reference genome, samplesheet)
     └── results/        # All output files organized by processing step
         ├── 01_variant_calling/
-        ├── 02_filtering/
+        ├── 02_chromosome_filtering/
         ├── 03_chromosome_filtering/
         ├── 04_mutant_analysis/
         ├── 05_annotation/
@@ -151,40 +151,66 @@ Here we setup the file structure and some other metadata.
 
 .. code-block:: shell
 
-    # navigate to source directory
-    cd source/
+    # convenience function since it will be used in most downstream operations
+    setup() {
+        # navigate to source directory
+        cd source/
 
-    # various configuration variables
-    THREADS=16
-    GATK_MEM="64g"
-    GATK_JAVA_OPTS="-Xmx${GATK_MEM} -XX:+UseParallelGC"
+        # various configuration variables
+        THREADS=16
+        GATK_MEM="64g"
+        GATK_JAVA_OPTS="-Xmx${GATK_MEM} -XX:+UseParallelGC"
 
-    # paths relative to source directory
-    DATA_DIR="../data"
-    RESULTS_DIR="../results"
-    SAMPLESHEET="${DATA_DIR}/samplesheet.F0-F2.tsv"
-    REFERENCE_FA="${DATA_DIR}/Reference/GCA_000002035.2_Zv9_genomic.fna"
+        # paths relative to source directory
+        DATA_DIR="../data/"
+        RESULTS_DIR="../results/"
+        SAMPLESHEET="${DATA_DIR}/samplesheet.F0-F2.tsv"
+        REFERENCE_FA="${DATA_DIR}/Reference/GCA_000002035.2_Zv9_genomic.fna"
+        REF_FIXED_FA="${DATA_DIR}/Reference/GCA_000002035.2_Zv9_genomic.ChrFixed.fna"
+        CHROM_MAP="${DATA_DIR}/chrom_table.tsv"
 
-    # create results directory structure
-    mkdir -p ${RESULTS_DIR}/{01_variant_calling,02_filtering,03_chromosome_filtering,04_mutant_analysis,05_annotation,06_final_results}
+        # parse samplesheet and load samples into array
+        MUT_SAMPLES=($(awk '$3=="mutant" {print $1}' ${SAMPLESHEET}))
+        REF_SAMPLES=($(awk '$3=="reference" {print $1}' ${SAMPLESHEET}))
+        echo "${#MUT_SAMPLES[@]} mutants: ${MUT_SAMPLES[@]}"
+        echo "${#REF_SAMPLES[@]} references: ${REF_SAMPLES[@]}"
+
+        # create results directory structure
+        mkdir -p ${RESULTS_DIR}/{01_variant_calling,02_chromosome_filtering,03_hard_filtering,04_mutant_analysis,05_annotation,06_final_results}
+
+        # set downstream directories and suffixes
+        # if step 3 is actioned, edit these as needed
+        PROCESSED_VCF_DIR="${RESULTS_DIR}/02_chromosome_filtering"
+        VCF_SUFFIX="_chr.vcf"
+    }
 
 Create some metadata files. The chromosome file maps the chromosome IDs onto the ``chr{1..25}`` more human-readable format. Have the ``fasta`` genome reference file on hand.
 
 .. code-block:: shell
 
-    # create chromosome list (adjust range as needed)
-    for i in {1..25}; do echo chr${i}; done > ${DATA_DIR}/chromosomes.txt
+    setup_metadata() {
+        # verify reference genome preparation
+        if [[ ! -f "${REFERENCE_FA}.fai" ]]; then
+            echo "Creating FASTA index..."
+            samtools faidx ${REFERENCE_FA}
+        fi
+        if [[ ! -f "${REFERENCE_FA%.*}.dict" ]]; then
+            echo "Creating sequence dictionary..."
+            gatk CreateSequenceDictionary -R ${REFERENCE_FA}
+        fi
 
-    # verify reference genome preparation
-    if [[ ! -f "${REFERENCE_FA}.fai" ]]; then
-        echo "Creating FASTA index..."
-        samtools faidx ${REFERENCE_FA}
-    fi
-    if [[ ! -f "${REFERENCE_FA%.*}.dict" ]]; then
-        echo "Creating sequence dictionary..."
-        gatk CreateSequenceDictionary -R ${REFERENCE_FA}
-    fi
+        # same but for the fixed chromosomes
+        if [[ ! -f "${REF_FIXED_FA}.fai" ]]; then
+            echo "Creating FASTA index..."
+            samtools faidx ${REFERENCE_FA}
+        fi
 
+        # create chromosome list (adjust range as needed)
+        head -n 25 ${REF_FIXED_FA}.fai > ${DATA_DIR}/chromosomes.txt
+    }
+
+    setup
+    setup_metadata
 
 Whole zebrafish genome assembly
 +++++++++++++++++++++++++++++++
@@ -195,6 +221,9 @@ Variant calling and read filtering
 ++++++++++++++++++++++++++++++++++
 
 We filter the ``bam`` files for low quality reads and perform variant calling simultaneously.
+
+.. note::
+    We apply intentionally minimal filtering at the early stage and apply custom filters later. Here, we are mainly interested in filtering poorly mapped reads.
 
 .. code-block:: shell
 
@@ -213,11 +242,11 @@ We filter the ``bam`` files for low quality reads and perform variant calling si
         
         # Verify BAM file and index exist
         if [[ ! -f "${bam_path}" ]]; then
-            echo "ERROR: BAM file not found: ${bam_path}"
+            echo "No BAM: ${bam_path}"
             return 1
         fi
-        if [[ ! -f "${bam_path}.bai" ]]; then
-            echo "ERROR: BAM index not found: ${bam_path}.bai"
+        if [[ ! -f "${bam_path/bam/bai}" ]]; then
+            echo "No index: ${bam_path/bam/bai}"
             return 1
         fi
         
@@ -227,59 +256,92 @@ We filter the ``bam`` files for low quality reads and perform variant calling si
             -I ${bam_path} \
             -O "${RESULTS_DIR}/01_variant_calling/${sample}_raw.vcf.gz" \
             --minimum-mapping-quality 20 \
-            --base-quality-score-threshold 20 \
-            --standard-min-confidence-threshold-for-calling 30 \
-            --standard-min-confidence-threshold-for-emitting 10 \
+            --min-base-quality-score 20 \
+            --stand-call-conf 30 \
             --max-reads-per-alignment-start 50 \
             --max-mnp-distance 1 \
             --native-pair-hmm-threads ${THREADS} \
             --verbosity INFO
-        
+                
         echo "Completed variant calling for ${sample_type}: $sample"        
     }
 
-    # setup parallel runs
-    export -f call_variants
+    setup
     export REFERENCE_FA RESULTS_DIR GATK_JAVA_OPTS THREADS SAMPLESHEET
 
-    PARALLEL_JOBS=$(( THREADS / 2 ))
-    if [ $PARALLEL_JOBS -lt 1 ]; then PARALLEL_JOBS=1; fi
-
-    echo "Running ${PARALLEL_JOBS} parallel GATK jobs"
-
-    # Process mutant samples
-    printf '%s\n' "${MUTANT_SAMPLES[@]}" | \
-    parallel -j ${PARALLEL_JOBS} call_variants {} mutant
-
-    # Process reference samples
-    printf '%s\n' "${REFERENCE_SAMPLES[@]}" | \
-    parallel -j ${PARALLEL_JOBS} call_variants {} reference
+    for ref in "${REF_SAMPLES[@]}"; do call_variants ${ref} reference; done
+    for mut in "${MUT_SAMPLES[@]}"; do call_variants ${mut} mutant; done
 
     echo "Variant calling completed for all samples"
 
-Rename chromosomes in fasta file with map file
-++++++++++++++++++++++++++++++++++++++++++++++
+.. caution:: 
+    The above was tested given an allocation of 40 cpus and 80 GB of memory. You may want to adjust the number of parallel jobs and memory corresponding to your available resources.
 
-``data/chrom_table.tsv`` contains the chromosome name mappings. Use this to remap the chromosomes.
+.. caution::
+    ``gatk`` settings are specific to version ``4.5.0.0-gcc-13.2.0`` and may not work for other versions.
+
+
+.. raw:: html
+
+   <details>
+   <summary><a>Optional hard filtering.</a></summary>
+
+.. warning::
+    These filters may be too stringent for this use case. Only use if you are seeing an excess of false positives.
 
 .. code-block:: shell
 
-    module load samtools
+    # Function to apply GATK hard filters
+    apply_hard_filters() {
+        local sample=$1
+        local input_dir="${RESULTS_DIR}/02_chromosome_filtering"
+        local output_dir="${RESULTS_DIR}/03_hard_filtering"
+        
+        echo "Applying hard filters to: $sample"
+        
+        # Apply GATK hard filters
+        gatk --java-options "${GATK_JAVA_OPTS}" VariantFiltration \
+            -R ${REFERENCE_FA} \
+            -V "${input_dir}/${sample}_chr.vcf" \
+            -O "${output_dir}/${sample}_filtered.vcf" \
+            --filter-expression "QD < 2.0" --filter-name "QD2" \
+            --filter-expression "QUAL < 30.0" --filter-name "QUAL30" \
+            --filter-expression "SOR > 3.0" --filter-name "SOR3" \
+            --filter-expression "FS > 60.0" --filter-name "FS60" \
+            --filter-expression "MQ < 40.0" --filter-name "MQ40" \
+            --filter-expression "MQRankSum < -12.5" --filter-name "MQRankSum-12.5" \
+            --filter-expression "ReadPosRankSum < -8.0" --filter-name "ReadPosRankSum-8"
+        
+        # Select only PASS variants
+        gatk --java-options "${GATK_JAVA_OPTS}" SelectVariants \
+            -R ${REFERENCE_FA} \
+            -V "${output_dir}/${sample}_filtered.vcf" \
+            -O "${output_dir}/${sample}_pass.vcf" \
+            --exclude-filtered
+        
+        # Normalize with bcftools
+        bcftools norm -m-both -f ${REFERENCE_FA} "${output_dir}/${sample}_pass.vcf" \
+            --threads ${THREADS} -o "${output_dir}/${sample}_chr.vcf"
+        
+        # Clean up intermediate files
+        rm -f "${output_dir}/${sample}_filtered.vcf" "${output_dir}/${sample}_pass.vcf"
+        
+        echo "Completed hard filtering for: $sample"
+    }
+    
+    # store hard-filtered variants
+    setup
+    mkdir -p "${RESULTS_DIR}/03_hard_filtering"
+    
+    # Process all samples
+    for sample in "${ALL_SAMPLES[@]}"; do
+        apply_hard_filters $sample
+    done
 
-    REF_GEN="../data/Reference/GCA_000002035.2_Zv9_genomic.fna"
-    CHR_MAP="../data/chrom_table.tsv"
-    OUT_GEN="../data/Reference/GCA_000002035.2_Zv9_genomic.ChrFixed.fna"
+.. raw:: html
 
-    {
-        while read seqname length rest; do
-            if grep -q "^${seqname}" ${CHR_MAP}; then
-                newname=$(awk -v seq="$seqname" '$1==seq {print $2}' ${CHR_MAP})
-                samtools faidx ${REF_GEN} "$seqname" | sed "s/^>$seqname/>$newname/"
-            else
-                samtools faidx ${REF_GEN} "$seqname"
-            fi
-        done < ${REF_GEN}.fai
-    } > ${OUT_GEN}
+    </details>
+
 
 Rename chromosomes in vcf with map file, and discard non-chromosomes
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -288,84 +350,148 @@ Rename chromosomes in vcf with map file, and discard non-chromosomes
 
 At the same time, we are only interested in the chromosomes, which start with ``chr`` and go from ``chr1`` to ``chr25``. So we discard all other contigs (including from the header).
 
+.. code-block:: shell
+
+    filter_and_rename_chromosomes() {
+        local sample=$1
+        local input_dir="${RESULTS_DIR}/01_variant_calling"
+        local output_dir="${RESULTS_DIR}/02_chromosome_filtering"
+        
+        echo "Filtering chromosomes for: $sample"
+        # 33550336 use extreme range to cover all
+        for i in {1..25}; do 
+            echo -e "chr${i}\t1\t1111111111111000000000000"
+        done > ../data/chromosomes_only.txt
+
+        # we are going to paste text, so leave it decompressed
+        # rename all contigs with mapping
+        bcftools annotate --threads ${THREADS} \
+            --rename-chr ${CHROM_MAP} \
+            ${input_dir}/${sample}_raw.vcf.gz | \
+        grep -v '##contig=<ID=FR' > "${output_dir}/${sample}_reannot.vcf"
+        
+        # filter to main chromosomes only and remove non-chromosomal variants from header
+        bcftools view -t $(cut -f1 ${DATA_DIR}/chromosomes.txt | paste -sd,) \
+            "${output_dir}/${sample}_reannot.vcf" \
+            --threads ${THREADS} \
+            -o "${output_dir}/${sample}_chr_temp.vcf"
+        
+        # clean up header to remove non-chromosomal contigs
+        bcftools reheader -f ${DATA_DIR}/chromosomes.txt \
+            "${output_dir}/${sample}_chr_temp.vcf" \
+            -o "${output_dir}/${sample}_chr.vcf"
+        
+        # clean up intermediate files
+        rm -f "${output_dir}/${sample}_reannot.vcf" \
+            "${output_dir}/${sample}_chr_temp.vcf"
+        
+        echo "Completed chromosome filtering for: $sample"
+    }
+
+    # process all samples sequentially
+    setup
+
+    ALL_SAMPLES=("${MUTANT_SAMPLES[@]}" "${REFERENCE_SAMPLES[@]}")
+    for sample in "${ALL_SAMPLES[@]}"; do
+        filter_and_rename_chromosomes $sample
+    done
+
+Strict candidate pipeline F0-F2
++++++++++++++++++++++++++++++++
+
+The following steps are carried out for a single mutant:
+1. To retain multiallelic snps, normalise all samples
+2. To compare `mutants` with `references`, merge into same file
+3. 
+
+
 For one example:
 
 .. code-block:: shell
 
-    THREADS=16
-    # 33550336
-    for i in {1..25}; do 
-        echo -e "chr${i}\t1\t1111111111111000000000000"
-    done > ../data/chromosomes_only.txt
+    normalise() {
+        bcftools norm -m-both -f ${REFERENCE_FA} "${output_dir}/${sample}_pass.vcf" \
+            --threads ${THREADS} -o "${output_dir}/${sample}_final.vcf"
+    }
 
-    bcftools annotate --threads ${THREADS} \
-        --rename-chr "../data/chrom_table.tsv" \
-        ../data/VCF_Original/TL2312073-163-4L.vcf.gz | \
-    grep -v '##contig=<ID=FR' | \
-    bgzip -c ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz
-    bcftools index -t ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz
-
-For an example on all samples:
+    ALL_SAMPLES=("${MUTANT_SAMPLES[@]}" "${REFERENCE_SAMPLES[@]}")
+    for sample in "${ALL_SAMPLES[@]}"; do
+        normalise $sample
+    done
 
 .. code-block:: shell
 
-    THREADS=16
-    metadata="../data/samplesheet_postprocess.tsv"
-    CHR_MAP="../data/chrom_table.tsv"
-    CHR_FIL="../data/chromosomes_only.txt"
-    # 33550336
-    for i in {1..25}; do 
-        echo -e "chr${i}\t1\t1111111111111000000000000"
-    done > ../data/chromosomes_only.txt
+    process_mutant() {
+        local mutant=$1
+        local input_dir="${PROCESSED_VCF_DIR}"
+        local output_dir="${RESULTS_DIR}/04_mutant_analysis"
 
-    tail -n +2 ${metadata} | \
-        while IFS="\t" read -r line; do
-            in=$(echo $line | cut -d ' ' -f3)
-            out="../results/VCF_ChrFixed/"$(basename ${in})
-            bcftools annotate \
-                --threads ${THREADS} \
-                --rename-chrs ${CHR_MAP} \
-                ${in} | \
-            grep -v '##contig=<ID=FR' | \
-            bgzip -c > ${out}
-            bcftools index -t ${out}
-            chgrp -R hogan_lab_bioinf ${out}*
-        done     
-
-Normalise VCF files
-+++++++++++++++++++
-
-For one example:
-
-.. code-block:: shell
-
-    # $REF_GEN is the previous $OUT_GEN, with fixed chromosome names
-    REF_GEN="../data/Reference/GCA_000002035.2_Zv9_genomic.ChrFixed.fna"
-    THREADS=16
-    bcftools norm --threads ${THREADS} -m-both -f ${REF_GEN} \
-        ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz \
-        -Ob -o ../results/VCF_Norm/TL2312073-163-4L.vcf.gz
-    bcftools index --threads ${THREADS} -t \
-        ../results/VCF_Norm/TL2312073-163-4L.vcf.gz
-
-For an example on all samples:
-
-.. code-block:: shell
-
-    # $REF_GEN is the previous $OUT_GEN, with fixed chromosome names
-    REF_GEN="../data/Reference/GCA_000002035.2_Zv9_genomic.ChrFixed.fna"
-    THREADS=16
-    INFILE_DIR="../results/VCF_ChrFixed/*gz"
-    OUTFILE_DIR="../results/VCF_Norm/"
-
-    find ${INFILE_DIR} | sort | \
-        while IFS="\t" read -r line; do
-            in=$(echo $line)
-            out=${OUTFILE_DIR}$(basename ${in})
-            bcftools norm --threads ${THREADS} -m-both \
-                -f ${REF_GEN} ${in} -Ob -o ${out}
-            bcftools index --threads ${THREADS} -t ${out}
+        # Create VCF list for this mutant + all references
+        VCF_LIST="${PROCESSED_VCF_DIR}/${mutant}${VCF_SUFFIX}"
+        for ref in "${REFERENCE_SAMPLES[@]}"; do
+            VCF_LIST="${VCF_LIST} ${PROCESSED_VCF_DIR}/${ref}${VCF_SUFFIX}"
         done
+        
+        # Merge this mutant with all references
+        echo "Merging ${mutant} with references..."
+        bcftools merge ${VCF_LIST} --threads ${THREADS} -o "${output_dir}/${mutant}_merged.vcf"
+        
+        # Filter for SNPs only
+        echo "Filtering SNPs for ${mutant}..."
+        bcftools view -v snps "${output_dir}/${mutant}_merged.vcf" \
+            --threads ${THREADS} -o "${output_dir}/${mutant}_snps.vcf"
+        
+        # Generate dynamic filter expressions
+        NUM_REFS=${#REFERENCE_SAMPLES[@]}
+        
+        # Build genotype filter (mutant=1/1, all refs don't contain "1")
+        GT_FILTER='GT[0]="1/1"'
+        for ((i=1; i<=NUM_REFS; i++)); do
+            GT_FILTER="${GT_FILTER} && GT[${i}]!~\"1\""
+        done
+        
+        # Build depth filter (at least one ref has DP>=1)
+        DP_FILTER=""
+        for ((i=1; i<=NUM_REFS; i++)); do
+            if [ $i -eq 1 ]; then
+                DP_FILTER="FORMAT/DP[${i}]>=1"
+            else
+                DP_FILTER="${DP_FILTER} || FORMAT/DP[${i}]>=1"
+            fi
+        done
+        
+        # Combine filters
+        STRICT_FILTER="${GT_FILTER} && (${DP_FILTER})"
+        
+        echo "Applying strict candidate filter for ${mutant}..."
+        bcftools filter -i "${STRICT_FILTER}" \
+            "${output_dir}/${mutant}_snps.vcf" \
+            --threads ${THREADS} \
+            -o "${output_dir}/${mutant}_strict_candidates.vcf"
+        
+        # Generate AF filter for mutant (high AF) and refs (low AF)
+        AF_FILTER='FORMAT/AD[0:1]/(FORMAT/AD[0:0]+FORMAT/AD[0:1]) >= 0.8'
+        
+        for ((i=1; i<=NUM_REFS; i++)); do
+            AF_FILTER="${AF_FILTER} && FORMAT/AD[${i}:1]/(FORMAT/AD[${i}:0]+FORMAT/AD[${i}:1]) <= 0.15"
+        done
+        
+        echo "Applying allele frequency filter for ${mutant}..."
+        bcftools filter -i "${AF_FILTER}" \
+            "${output_dir}/${mutant}_strict_candidates.vcf" \
+            --threads ${THREADS} \
+            -o "${output_dir}/${mutant}_af_filtered.vcf"
+        
+        # Clean up intermediate files for this mutant
+        rm -f "${output_dir}/${mutant}_merged.vcf" "${output_dir}/${mutant}_snps.vcf" "${output_dir}/${mutant}_strict_candidates.vcf"
+        
+        echo "Completed analysis for mutant: $mutant"
+    }
+
+    # Process mutants sequentially
+    for mutant in "${MUTANT_SAMPLES[@]}"; do
+        process_mutant $mutant
+    done
 
 
 Merge files with refs
@@ -448,14 +574,13 @@ For an example on all samples:
 Obtain SNPs which occur in the sample but not the references
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Unrefined implementation (works only if grandparents have the reference allele)
-*******************************************************************************
-
 .. raw:: html
 
    <details>
    <summary><a>This unrefined implementation is preserved for the record.</a></summary>
 
+Unrefined implementation (works only if grandparents have the reference allele)
+*******************************************************************************
 
 Ideally we only should include samples homozygous for the SNPs. However, false heterozygotes appear in the data due to reads with low mapping quality introducing false heterozygoisty. Therefore, this filter is intentionally relaxed to accommodate heterozygotes. The information can be verified by inspecting the ``bam`` file directly.
 
