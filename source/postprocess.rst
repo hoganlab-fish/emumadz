@@ -405,31 +405,51 @@ The following steps are carried out for a single mutant:
 3. 
 
 
-For one example:
-
 .. code-block:: shell
 
-    normalise() {
-        bcftools norm -m-both -f ${REFERENCE_FA} "${output_dir}/${sample}_pass.vcf" \
-            --threads ${THREADS} -o "${output_dir}/${sample}_final.vcf"
-    }
-
-    ALL_SAMPLES=("${MUTANT_SAMPLES[@]}" "${REFERENCE_SAMPLES[@]}")
-    for sample in "${ALL_SAMPLES[@]}"; do
-        normalise $sample
-    done
-
-.. code-block:: shell
-
-    process_mutant() {
-        local mutant=$1
+    # Function to normalize VCF files before merging
+    normalize_vcf() {
+        local sample=$1
         local input_dir="${PROCESSED_VCF_DIR}"
         local output_dir="${RESULTS_DIR}/04_mutant_analysis"
+        local input_vcf="${input_dir}/${sample}${VCF_SUFFIX}"
+        local output_vcf="${output_dir}/${sample}_normalized.vcf"
+        
+        echo "Normalizing VCF for: $sample"
+        
+        # Normalize variants: decompose complex variants and left-align indels
+        bcftools norm -m-both -f ${REFERENCE_FA} "${input_vcf}" \
+            --threads ${THREADS} \
+            -o "${output_vcf}"
+        
+        echo "Completed normalization for: $sample"
+        return 0
+    }
 
-        # Create VCF list for this mutant + all references
-        VCF_LIST="${PROCESSED_VCF_DIR}/${mutant}${VCF_SUFFIX}"
+    # Function to process a single mutant
+    process_mutant() {
+        local mutant=$1
+        local output_dir="${RESULTS_DIR}/04_mutant_analysis"
+        
+        echo "================================================"
+        echo "Processing mutant: $mutant against all references"
+        echo "================================================"
+        
+        # First normalize all VCFs that will be merged (mutant + all references)
+        echo "Normalizing VCFs before merging..."
+        
+        # Normalize mutant VCF
+        normalize_vcf $mutant
+        
+        # Normalize all reference VCFs
         for ref in "${REFERENCE_SAMPLES[@]}"; do
-            VCF_LIST="${VCF_LIST} ${PROCESSED_VCF_DIR}/${ref}${VCF_SUFFIX}"
+            normalize_vcf $ref
+        done
+        
+        # Create VCF list for this mutant + all references (using normalized files)
+        VCF_LIST="${output_dir}/${mutant}_normalized.vcf"
+        for ref in "${REFERENCE_SAMPLES[@]}"; do
+            VCF_LIST="${VCF_LIST} ${output_dir}/${ref}_normalized.vcf"
         done
         
         # Merge this mutant with all references
@@ -483,7 +503,12 @@ For one example:
             -o "${output_dir}/${mutant}_af_filtered.vcf"
         
         # Clean up intermediate files for this mutant
-        rm -f "${output_dir}/${mutant}_merged.vcf" "${output_dir}/${mutant}_snps.vcf" "${output_dir}/${mutant}_strict_candidates.vcf"
+        rm -f "${output_dir}/${mutant}_normalized.vcf" "${output_dir}/${mutant}_merged.vcf" "${output_dir}/${mutant}_snps.vcf" "${output_dir}/${mutant}_strict_candidates.vcf"
+        
+        # Clean up normalized reference files (they'll be recreated for the next mutant)
+        for ref in "${REFERENCE_SAMPLES[@]}"; do
+            rm -f "${output_dir}/${ref}_normalized.vcf"
+        done
         
         echo "Completed analysis for mutant: $mutant"
     }
@@ -492,6 +517,8 @@ For one example:
     for mutant in "${MUTANT_SAMPLES[@]}"; do
         process_mutant $mutant
     done
+
+    echo "Per-mutant analysis completed"
 
 
 Merge files with refs
