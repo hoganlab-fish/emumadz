@@ -287,7 +287,7 @@ We filter the ``bam`` files for low quality reads and perform variant calling si
    <summary><a>Optional hard filtering.</a></summary>
 
 .. warning::
-    These filters may be too stringent for this use case. Only use if you are seeing an excess of false positives.
+    These filters may be too stringent for this use case. Only use if you are seeing an excess of false positives. Note that it is possible to later filter out false positives.
 
 .. code-block:: shell
 
@@ -378,9 +378,12 @@ At the same time, we are only interested in the chromosomes, which start with ``
         
         # clean up header to remove non-chromosomal contigs
         bcftools reheader -f ${DATA_DIR}/chromosomes.txt \
-            "${output_dir}/${sample}_chr_temp.vcf" \
-            -o "${output_dir}/${sample}_chr.vcf"
+            "${output_dir}/${sample}_chr_temp.vcf" | \
+        bgzip -@ ${THREADS} -c "${output_dir}/${sample}.vcf.gz"
         
+        bcftools index -t --threads ${THREADS} \
+            "${output_dir}/${sample}.vcf.gz"
+
         # clean up intermediate files
         rm -f "${output_dir}/${sample}_reannot.vcf" \
             "${output_dir}/${sample}_chr_temp.vcf"
@@ -391,7 +394,7 @@ At the same time, we are only interested in the chromosomes, which start with ``
     # process all samples sequentially
     setup
 
-    ALL_SAMPLES=("${MUTANT_SAMPLES[@]}" "${REFERENCE_SAMPLES[@]}")
+    ALL_SAMPLES=("${MUT_SAMPLES[@]}" "${REF_SAMPLES[@]}")
     for sample in "${ALL_SAMPLES[@]}"; do
         filter_and_rename_chromosomes $sample
     done
