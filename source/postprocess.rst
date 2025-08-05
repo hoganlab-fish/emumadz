@@ -379,7 +379,7 @@ At the same time, we are only interested in the chromosomes, which start with ``
         # clean up header to remove non-chromosomal contigs
         bcftools reheader -f ${DATA_DIR}/chromosomes.txt \
             "${output_dir}/${sample}_chr_temp.vcf" | \
-        bgzip -@ ${THREADS} -c "${output_dir}/${sample}.vcf.gz"
+        bgzip -@ ${THREADS} -c > "${output_dir}/${sample}.vcf.gz"
         
         bcftools index -t --threads ${THREADS} \
             "${output_dir}/${sample}.vcf.gz"
