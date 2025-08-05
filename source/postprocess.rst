@@ -381,7 +381,7 @@ At the same time, we are only interested in the chromosomes, which start with ``
             "${output_dir}/${sample}_chr_temp.vcf" | \
         bgzip -@ ${THREADS} -c > "${output_dir}/${sample}.vcf.gz"
         
-        bcftools index -t --threads ${THREADS} \
+        bcftools index --threads ${THREADS} \
             "${output_dir}/${sample}.vcf.gz"
 
         # clean up intermediate files
