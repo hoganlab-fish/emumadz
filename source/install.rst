@@ -52,3 +52,18 @@ The critical packages and their version numbers are listed below for reference::
     pandas==2.3.0
     python==3.13.3
     samtools==1.19.2-gcc-13.2.0
+
+ENSEMBL's Variant Effect Predictor ``VEP`` requires::
+
+  perl==5.32.1
+  perl-dbi==1.643
+  perl-archive-zip==1.6.8
+  perl-dbd-mysql==4.050
+  perl-set-intervaltree==0.12
+  perl-json==4.10
+  perl-perlio-gzip==0.20
+  perl-bio-bigfile==1.07
+
+`You can follow the install instructions on their github`_, or use the ``conda`` or ``docker`` environments provided.
+
+.. _You can follow the install instructions on their github: https://github.com/Ensembl/ensembl-vep
