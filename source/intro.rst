@@ -32,6 +32,18 @@ We provide a pipeline which:
 
 *put a workflow figure here*
 
+Changelog
+---------
+- Uses updated versions of ``gatk``, ``bcftools``, ``snpEff`` to replace obsolete functionality.
+- Uses ``csi`` instead of ``tbi`` indexing for stability with long chromosomes.
+- Reworked logic of the original pipeline to handle missing values.
+- Increased threshold for read mapping quality which was causing false negatives.
+- Lowered threshold for homozygous calls to handle leakage which was causing false negatives.
+- All-in-one pipeline which can handle any combination of mutant and control data.
+- Now handles mulitallelic SNPs correctly (i.e. if a reference has a SNP but this SNP is different to the mutant, it is correctly identified as a SNP event in the mutant.)
+- Concept of candidate strictness is removed and replaced with allele frequencies with user-defined filters.
+- Modern visualisation methods independent of ``IGV`` genome browser.
+
 Cite us with
 ------------
 
