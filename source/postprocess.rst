@@ -154,7 +154,11 @@ Here we setup the file structure and some other metadata.
     # convenience function since it will be used in most downstream operations
     setup() {
         # navigate to source directory
-        cd source/
+        if [[ ! $(basename $PWD) -eq source ]]; then
+            echo "All scripts are set to run from directory source"
+            echo "See directory structure above for more information"
+            exit 1
+        fi
 
         # various configuration variables
         THREADS=16
@@ -176,12 +180,11 @@ Here we setup the file structure and some other metadata.
         echo "${#REF_SAMPLES[@]} references: ${REF_SAMPLES[@]}"
 
         # create results directory structure
-        mkdir -p ${RESULTS_DIR}/{01_variant_calling,02_chromosome_filtering,03_hard_filtering,04_mutant_analysis,05_annotation,06_final_results}
+        mkdir -p ${RESULTS_DIR}/{01_variant_called,02_chromosome_filtered,03_stringent_filtered,04_normalised,05_samples_merged,06_snps_filtered,07_mutant_analysed,08_annotated,09_finalised}
 
         # set downstream directories and suffixes
         # if step 3 is actioned, edit these as needed
-        PROCESSED_VCF_DIR="${RESULTS_DIR}/02_chromosome_filtering"
-        VCF_SUFFIX="_chr.vcf"
+        PROCESSED_VCF_DIR="${RESULTS_DIR}/02_chromosome_filtered"
     }
 
 Create some metadata files. The chromosome file maps the chromosome IDs onto the ``chr{1..25}`` more human-readable format. Have the ``fasta`` genome reference file on hand.
@@ -354,8 +357,8 @@ At the same time, we are only interested in the chromosomes, which start with ``
 
     filter_and_rename_chromosomes() {
         local sample=$1
-        local input_dir="${RESULTS_DIR}/01_variant_calling"
-        local output_dir="${RESULTS_DIR}/02_chromosome_filtering"
+        local input_dir="${RESULTS_DIR}/01_variant_called"
+        local output_dir="${RESULTS_DIR}/02_chromosome_filtered"
         
         echo "Filtering chromosomes for: $sample"
         # 33550336 use extreme range to cover all
@@ -399,65 +402,105 @@ At the same time, we are only interested in the chromosomes, which start with ``
         filter_and_rename_chromosomes $sample
     done
 
-Strict candidate pipeline F0-F2
-+++++++++++++++++++++++++++++++
+Decompose multiallelic variants into individual instances
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-The following steps are carried out for a single mutant:
-1. To retain multiallelic snps, normalise all samples
-2. To compare `mutants` with `references`, merge into same file
-3. 
-
+The aim of the normalisation is to preserve differential events that may occur across alleles. For example, if a `reference control` is heterozygous for ``A/T`` point mutation, and the `sample mutant` is homozygous for a ``G`` point mutation, the mutant is considered to have a SNP event.
 
 .. code-block:: shell
 
-    # Function to normalize VCF files before merging
-    normalize_vcf() {
+    normalise_vcf() {
         local sample=$1
         local input_dir="${PROCESSED_VCF_DIR}"
-        local output_dir="${RESULTS_DIR}/04_mutant_analysis"
-        local input_vcf="${input_dir}/${sample}${VCF_SUFFIX}"
-        local output_vcf="${output_dir}/${sample}_normalized.vcf"
+        local output_dir="${RESULTS_DIR}/04_normalised/"
+        local input_vcf="${input_dir}/${sample}.vcf.gz"
+        local output_vcf="${output_dir}/${sample}.vcf.gz"
         
-        echo "Normalizing VCF for: $sample"
+        echo "Normalising VCF for: $sample"
         
-        # Normalize variants: decompose complex variants and left-align indels
-        bcftools norm -m-both -f ${REFERENCE_FA} "${input_vcf}" \
-            --threads ${THREADS} \
-            -o "${output_vcf}"
+        # normalize variants: decompose complex variants and left-align indels
+        bcftools norm -m-both -f "${REF_FIXED_FA}" "${input_vcf}" \
+            --threads ${THREADS} --write-index -Ob -o "${output_vcf}"
         
-        echo "Completed normalization for: $sample"
+        echo "Completed normalisation for: $sample"
         return 0
     }
+    
+    echo "Normalising VCFs before merging..."
+
+    ALL_SAMPLES=("${MUT_SAMPLES[@]}" "${REF_SAMPLES[@]}")
+    for sample in "${ALL_SAMPLES[@]}"; do
+        normalise_vcf $sample
+    done
+
+Merge files with refs
++++++++++++++++++++++
+
+Samples are then merged for side-by-side comparison between `sample mutants` and `reference controls`.
+
+For each sample, merge the four references:
+- TL2209397-ENUref-Female.vcf.gz
+- TL2209398-ENUref-Male.vcf.gz
+- TL2209399-TUref-Female.vcf.gz
+- TL2209400-TUref-Male.vcf.gz
+
+Each sample occupies the first slot in the vcf sample columns, followed by the references.
+
+.. caution::
+    The order of samples and references is important.
+
+.. code-block:: shell
+
+    merge_vcf() {
+        local sample=$1
+        local input_dir="${RESULTS_DIR}/04_normalised/"
+        local output_dir="${RESULTS_DIR}/05_samples_merged/"
+
+        # Create VCF list for this mutant + all references (using normalised files)
+        VCF_LIST="${input_dir}/${sample}.vcf.gz"
+        for ref in "${REF_SAMPLES[@]}"; do
+            VCF_LIST="${VCF_LIST} ${input_dir}/${ref}.vcf.gz"
+        done
+
+        # Merge this mutant with all references
+        echo "Merging ${sample} with references..."
+        bcftools merge ${VCF_LIST} --threads ${THREADS} \
+            --write-index -Ob -o "${output_dir}/${sample}.vcf.gz"
+    }
+    
+    for sample in "${MUT_SAMPLES[@]}"; do
+        merge_vcf $sample
+    done
+
+.. code-block:: shell
 
     # Function to process a single mutant
     process_mutant() {
         local mutant=$1
-        local output_dir="${RESULTS_DIR}/04_mutant_analysis"
-        
-        echo "================================================"
-        echo "Processing mutant: $mutant against all references"
-        echo "================================================"
+        local normal_dir="${RESULTS_DIR}/04_normalised"
+        local merged_dir="${RESULTS_DIR}/05_samples_merged"
+        local output_dir="${RESULTS_DIR}/06_mutant_analysed"
         
         # First normalize all VCFs that will be merged (mutant + all references)
         echo "Normalizing VCFs before merging..."
-        
-        # Normalize mutant VCF
-        normalize_vcf $mutant
-        
-        # Normalize all reference VCFs
-        for ref in "${REFERENCE_SAMPLES[@]}"; do
-            normalize_vcf $ref
+
+        ALL_SAMPLES=("${MUT_SAMPLES[@]}" "${REF_SAMPLES[@]}")
+        for sample in "${ALL_SAMPLES[@]}"; do
+            normalise_vcf $sample
         done
-        
+
+        echo "Processing mutant: $mutant against all references"
+
         # Create VCF list for this mutant + all references (using normalized files)
-        VCF_LIST="${output_dir}/${mutant}_normalized.vcf"
-        for ref in "${REFERENCE_SAMPLES[@]}"; do
-            VCF_LIST="${VCF_LIST} ${output_dir}/${ref}_normalized.vcf"
+        VCF_LIST="${normal_dir}/${mutant}.vcf.gz"
+        for ref in "${REF_SAMPLES[@]}"; do
+            VCF_LIST="${VCF_LIST} ${normal_dir}/${ref}.vcf.gz"
         done
         
         # Merge this mutant with all references
         echo "Merging ${mutant} with references..."
-        bcftools merge ${VCF_LIST} --threads ${THREADS} -o "${output_dir}/${mutant}_merged.vcf"
+        bcftools merge ${VCF_LIST} --threads ${THREADS} \
+            --write-index -Ob -o "${output_dir}/${mutant}.vcf.gz"
         
         # Filter for SNPs only
         echo "Filtering SNPs for ${mutant}..."
@@ -522,6 +565,13 @@ The following steps are carried out for a single mutant:
     done
 
     echo "Per-mutant analysis completed"
+
+The remaining steps are performed sequentially for each sample.
+
+
+
+Strict candidate pipeline F0-F2
++++++++++++++++++++++++++++++++
 
 
 Merge files with refs
