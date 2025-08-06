@@ -452,16 +452,15 @@ Each sample occupies the first slot in the vcf sample columns, followed by the r
         local input_dir="${RESULTS_DIR}/04_normalised/"
         local output_dir="${RESULTS_DIR}/05_samples_merged/"
 
-        # Create VCF list for this mutant + all references (using normalised files)
+        # create VCF list for this mutant + all references (using normalised files)
         VCF_LIST="${input_dir}/${sample}.vcf.gz"
         for ref in "${REF_SAMPLES[@]}"; do
             VCF_LIST="${VCF_LIST} ${input_dir}/${ref}.vcf.gz"
         done
 
-        # Merge this mutant with all references
+        # merge this mutant with all references
         echo "Merging ${sample} with references..."
-        bcftools merge ${VCF_LIST} --threads ${THREADS} | \
-        bcftools norm -m-any -f ${REF_FIXED_FA} --write-index \
+        bcftools merge ${VCF_LIST} --threads ${THREADS} --write-index \
             -Ob -o "${output_dir}/${sample}.vcf.gz"
     }
     
@@ -648,166 +647,25 @@ The three criteria are implemented together.
         snps_vcf $sample
     done
 
-.. raw:: html
-
-   <details>
-   <summary><a>This unrefined implementation is preserved for the record.</a></summary>
-
-Unrefined implementation (works only if grandparents have the reference allele)
-*******************************************************************************
-
-Ideally we only should include samples homozygous for the SNPs. However, false heterozygotes appear in the data due to reads with low mapping quality introducing false heterozygoisty. Therefore, this filter is intentionally relaxed to accommodate heterozygotes. The information can be verified by inspecting the ``bam`` file directly.
-
-For one example:
-
-.. code-block:: shell
-
-    THREADS=16
-    bcftools view --threads ${THREADS} \
-        -i 'GT[0]="hom" && F_MISSING=0.8 || GT[0]="het" && F_MISSING=0.8' \
-        ../results/VCF_Snps/TL2312073-163-4L.vcf.gz \
-        -Ob -o ../results/VCF_Candidates/TL2312073-163-4L.vcf.gz
-
-To verify that the conditional statements are formulated correctly and that this returns expected results:
-
-.. code-block:: shell
-
-    # both return the same line count of 1481032
-    THREADS=16
-    bcftools view --threads ${THREADS} \
-        -i 'GT[0]="hom" && F_MISSING=0.8 || GT[0]="het" && F_MISSING=0.8' \
-        ../results/VCF_Snps/TL2312073-163-4L.vcf.gz | \
-        grep -v '#' | wc -l
-    bcftools view --threads ${THREADS}\
-        -i 'GT[0]="hom" && F_MISSING=0.8 || GT[0]="het" && F_MISSING=0.8' \
-        ../results/VCF_Snps/TL2312073-163-4L.vcf.gz | \
-        grep -Pc './.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.$'
-
-For an example on all samples:
-
-.. code-block:: shell
-
-    THREADS=16
-    INFILE_DIR="../results/VCF_Snps/*gz"
-    OUTFILE_DIR="../results/VCF_Candidates/"
-
-    find ${INFILE_DIR} | sort | \
-        while IFS="\t" read -r line; do
-            in=$(echo $line)
-            out=${OUTFILE_DIR}$(basename ${in})
-            bcftools view --threads ${THREADS} \
-                -i 'GT[0]="hom" && F_MISSING=0.8 || GT[0]="het" && F_MISSING=0.8' \
-                ${in} -Ob -o ${out}
-            bcftools index --threads ${THREADS} -t ${out}
-        done
-
-.. note::
-    To be refined. Cannot just obtain all missing snps in refs. e.g:
-        - Reference allele may be A
-        - Grandparents may be C
-        - Mutant may be G
-
-.. raw:: html
-
-   </details>
-
-Refined implementation (works if grandparents have the reference allele)
-************************************************************************
-
-``vcf`` file specifications:
-- We have a multisample vcf file
-- The first sample is the mutant
-- The remaining 4 samples are the grandparent `F0` samples used as a reference
-- Each sample is the result of variant calling against the primary reference genome
-
-.. raw:: html
-
-   <details>
-   <summary><a>Original criteria is preserved for the record.</a></summary>
-
-Original claimed criteria
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Candidate criteria:
-    1. The mutant must be covered to a depth of >= 1 read
-    2. At least one of the unaffected sibling or other samples must be covered to a depth of >= 1 read
-    3. If the mutant and sibling have a single allele, it must not be the same in both
-    4. The mutant must have a majority allele that is:
-        a. not the majority allele in any of the 'other' samples'''
-
-Strict candidate criteria:
-    1. Mutant is homozygous
-    2. All of the 'other' samples are called
-    3. Mutant allele is not present in any of the 'other' samples
-
-Reworded criteria
-^^^^^^^^^^^^^^^^^
-
-.. raw:: html
-
-   </details>
-
-Candidate criteria:
-    1. The mutant must be covered to a depth of >= 1 read
-    2. At least one of the other samples must be covered to a depth of >= 1 read
-    3. If the mutant and grandparent reference have a single allele, it must not be the same in both
-    4. The mutant must have a majority allele that is not the majority allele in any of the F0 references
-
-Strict candidate criteria:
-    1. Find positions where F2 has a homozygous mutation
-    2. None of the F0s have that mutation
-    3. At least one F0 has coverage
-
-Modular ``bcftools``-native implementation of *strict candidate criteria* filter for one sample:
-
-.. code-block:: shell
-
-    THREADS=16
-    INFILE_DIR="../results/VCF_Snps/*gz"
-    OUTFILE_DIR="../results/VCF_Candidates_Strict/"
-
-    # NOTE: for debugging purposes only
-    # are there 1/1 genotypes in the mutant
-    bcftools query -f '%CHROM:%POS[\t%GT]\n' SAMPLE.vcf | \
-        awk '$2=="1/1"' | wc -l
-
-    # check the range of genotypes of the mutant
-    bcftools query -f '%CHROM:%POS[\t%GT]\n' SAMPLE.vcf | \
-        cut -f2 | sort | uniq -c
-
-    # GT[0]="1/1" == mutant is homozygous
-    #   position 1 is the sample, therefore mutation
-    # GT[1+]!~"1" == mutant allele is absent in any references
-    #   !~ == doesnt contain 1, 0/0 or ./ OK
-    # FORMAT/DP[1+]>=1 == at least one read hits one reference
-    #   at least 1 reference has read(s) mapped to the region
-    bcftools filter --threads ${THREADS} \
-        -i 'GT[0]="1/1" && GT[1]!~"1" && GT[2]!~"1" && GT[3]!~"1" && GT[4]!~"1" && (FORMAT/DP[1]>=1 || FORMAT/DP[2]>=1 || FORMAT/DP[3]>=1 || FORMAT/DP[4]>=1)' \
-        ../results/VCF_Snps/TL2312073-163-4L.vcf.gz \
-        -Ob -o ../results/VCF_Candidates_Strict/TL2312073-163-4L.vcf.gz
-    bcftools index --threads ${THREADS} -t \
-        ../results/VCF_Candidates_Strict/TL2312073-163-4L.vcf.gz
-
-For an example on all samples:
-
-.. code-block:: shell
-
-    THREADS=16
-    INFILE_DIR="../results/VCF_Snps/*gz"
-    OUTFILE_DIR="../results/VCF_Candidates_Strict/"
-
-    find ${INFILE_DIR} | sort | \
-        while IFS="\t" read -r line; do
-            in=$(echo $line)
-            out=${OUTFILE_DIR}$(basename ${in})
-            bcftools filter --threads ${THREADS} \
-                -i 'GT[0]="1/1" && GT[1]!~"1" && GT[2]!~"1" && GT[3]!~"1" && GT[4]!~"1" && (FORMAT/DP[1]>=1 || FORMAT/DP[2]>=1 || FORMAT/DP[3]>=1 || FORMAT/DP[4]>=1)' \
-                ${in} -Ob -o ${out}
-            bcftools index --threads ${THREADS} -t ${out}
-        done
 
 Screen impact of SNP
 ++++++++++++++++++++
+
+Either ``VEP`` or ``snpEff`` will produce similarly formatted results. Here we use ``VEP``, which has improved performance in non-coding regions.
+
+VEP
+***
+
+We run ENSEMBL's variant effect predictor ``VEP`` on the data. Install instructions are provided separately. In this case we used the specific cache which can be obtained by:
+
+.. code-block:: shell
+
+    wget 'https://ftp.ensembl.org/pub/release-79/variation/VEP/danio_rerio_merged_vep_79_Zv9.tar.gz'
+
+`To be written`
+
+snpEff
+******
 
 We run ``snpEff`` to screen for SNPs which are predicted to be impactful. Annotations are added to the data in the process.
 
@@ -821,26 +679,10 @@ We run ``snpEff`` to screen for SNPs which are predicted to be impactful. Annota
 
 .. code-block:: shell
 
+    # SnpEff version SnpEff 5.2 (build 2023-09-29 06:17)
     snpEff -i vcf -v Zv9.75 TL2312073-163-4L.vcf.gz > bar.vcf
+
 
 Filter by SNP impact
 ++++++++++++++++++++
 
-
-TEMP
-++++
-
-Quick, unrefined way to pull out strict candidates for reference only. Not to be considered as final results!
-
-.. code-block:: shell
-
-    outdir="../results/tmp/"
-    pattern='#|./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.\t./.:.:.:.:.$'
-    metadata="../data/samplesheet_original.tsv"
-    mkdir -p ${outdir}
-    cut -f6 ${metadata} | tail -n +6 | \
-        while IFS="\t" read -r line; do
-            in=$(echo $line | cut -d ' ' -f3)
-            out="${outdir}$(basename ${in} | cut -d '-' -f1-3).vcf"
-            bgzip -cd ${in} | grep -P ${pattern} > ${out}
-        done
