@@ -295,17 +295,17 @@ We filter the ``bam`` files for low quality reads and perform variant calling si
 .. code-block:: shell
 
     # Function to apply GATK hard filters
-    apply_hard_filters() {
+    apply_stringent_filters() {
         local sample=$1
-        local input_dir="${RESULTS_DIR}/02_chromosome_filtering"
-        local output_dir="${RESULTS_DIR}/03_hard_filtering"
+        local input_dir="${RESULTS_DIR}/02_chromosome_filtered"
+        local output_dir="${RESULTS_DIR}/03_stringent_filtered"
         
         echo "Applying hard filters to: $sample"
         
         # Apply GATK hard filters
         gatk --java-options "${GATK_JAVA_OPTS}" VariantFiltration \
             -R ${REFERENCE_FA} \
-            -V "${input_dir}/${sample}_chr.vcf" \
+            -V "${input_dir}/${sample}.vcf" \
             -O "${output_dir}/${sample}_filtered.vcf" \
             --filter-expression "QD < 2.0" --filter-name "QD2" \
             --filter-expression "QUAL < 30.0" --filter-name "QUAL30" \
@@ -315,21 +315,17 @@ We filter the ``bam`` files for low quality reads and perform variant calling si
             --filter-expression "MQRankSum < -12.5" --filter-name "MQRankSum-12.5" \
             --filter-expression "ReadPosRankSum < -8.0" --filter-name "ReadPosRankSum-8"
         
-        # Select only PASS variants
+        # select only PASS variants
         gatk --java-options "${GATK_JAVA_OPTS}" SelectVariants \
             -R ${REFERENCE_FA} \
             -V "${output_dir}/${sample}_filtered.vcf" \
-            -O "${output_dir}/${sample}_pass.vcf" \
+            -O "${output_dir}/${sample}.vcf" \
             --exclude-filtered
         
-        # Normalize with bcftools
-        bcftools norm -m-both -f ${REFERENCE_FA} "${output_dir}/${sample}_pass.vcf" \
-            --threads ${THREADS} -o "${output_dir}/${sample}_chr.vcf"
+        # clean up intermediate files
+        rm -f "${output_dir}/${sample}_filtered.vcf"
         
-        # Clean up intermediate files
-        rm -f "${output_dir}/${sample}_filtered.vcf" "${output_dir}/${sample}_pass.vcf"
-        
-        echo "Completed hard filtering for: $sample"
+        echo "Completed stringent filtering for: $sample"
     }
     
     # store hard-filtered variants
@@ -405,7 +401,7 @@ At the same time, we are only interested in the chromosomes, which start with ``
 Decompose multiallelic variants into individual instances
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-The aim of the normalisation is to preserve differential events that may occur across alleles. For example, if a `reference control` is heterozygous for ``A/T`` point mutation, and the `sample mutant` is homozygous for a ``G`` point mutation, the mutant is considered to have a SNP event.
+The aim of the normalisation is to preserve differential events that may occur across alleles. For example, if a `reference control` is heterozygous for ``A/T`` point mutation, and the `mutant sample` is homozygous for a ``G`` point mutation, the mutant is considered to have a SNP event.
 
 .. code-block:: shell
 
@@ -436,7 +432,7 @@ The aim of the normalisation is to preserve differential events that may occur a
 Merge files with refs
 +++++++++++++++++++++
 
-Samples are then merged for side-by-side comparison between `sample mutants` and `reference controls`.
+Samples are then merged for side-by-side comparison between `mutant samples` and `reference controls`.
 
 For each sample, merge the four references:
 - TL2209397-ENUref-Female.vcf.gz
@@ -464,8 +460,9 @@ Each sample occupies the first slot in the vcf sample columns, followed by the r
 
         # Merge this mutant with all references
         echo "Merging ${sample} with references..."
-        bcftools merge ${VCF_LIST} --threads ${THREADS} \
-            --write-index -Ob -o "${output_dir}/${sample}.vcf.gz"
+        bcftools merge ${VCF_LIST} --threads ${THREADS} | \
+        bcftools norm -m-any -f ${REF_FIXED_FA} --write-index \
+            -Ob -o "${output_dir}/${sample}.vcf.gz"
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do
@@ -476,7 +473,7 @@ Each sample occupies the first slot in the vcf sample columns, followed by the r
 Filter for SNP only events
 ++++++++++++++++++++++++++
 
-Other mutations are not of interest since ENU induces point mutations.
+Other mutations are not of interest since `N`-ethyl-`N`-nitrosourea (ENU) used in the forward genetic screen mainly induces point mutations.
 
 .. code-block:: shell
 
@@ -497,187 +494,159 @@ Other mutations are not of interest since ENU induces point mutations.
     done
 
 
+Identify candidate SNPs
++++++++++++++++++++++++
+
+Obtain SNPs which occur in the sample but not the references. There are several criteria in our filter, summarised below:
+1. `mutant sample` must be covered to a depth of >= 1 read.
+2. At least one `reference control` must be covered to a depth of >= 1 read.
+3. If the `reference control` is multiallelic for a SNP, it should not match the `mutant sample`.
+
+Beyond this, a light mapping quality filter was implemented during the variant calling stage.
+
+The `reference control` may be for example a grandparent or a wild-type sibling. The pipeline is agnostic to input and will run regardless. An arbitrary number of `reference controls` can be used.
+
+We expand on the concept of multiallelic SNP events with some examples:
+- ORI is the `true original` 
+- REF is the `reference control`
+- MUT is the `mutant sample`
+
+Let us assume, the true canonical nucleotide is ``C`` at a given position.::
+
+    ==================
+    PLATONIC IDEAL REF
+    ==================
+
+    ORI ------C-------
+        ------C-------
+
+    =====EXAMPLE1=====
+    REF homozygous
+    MUT homozygous
+    SNP in ORI identical to REF    
+    SNP in REF different to MUT
+    This is a SNP event
+
+    ORI ------C-------
+        ------C-------
+
+    REF ------C-------
+        ------C-------
+
+    MUT ------G-------
+        ------G-------
+
+    =====EXAMPLE2=====
+    REF homozygous
+    MUT homozygous
+    SNP in ORI different to REF
+    SNP in REF identical to MUT
+    This is not a SNP event
+
+    ORI ------C-------
+        ------C-------
+
+    REF ------G-------
+        ------G-------
+
+    MUT ------G-------
+        ------G-------
+
+    =====EXAMPLE3=====
+    REF homozygous
+    MUT heterozygous
+    SNP in ORI different to REF
+    SNP in REF different to MUT
+    This is a SNP event
+
+    ORI ------C-------
+        ------C-------
+
+    REF ------A-------
+        ------T-------
+
+    MUT ------G-------
+        ------G-------
+
+    =====EXAMPLE4=====
+    REF heterozygous
+    MUT homozygous
+    SNP in ORI different to REF
+    SNP in REF partially different to MUT
+    This is not a SNP event
+
+    ORI ------C-------
+        ------C-------
+
+    REF ------A-------
+        ------G-------
+
+    MUT ------G-------
+        ------G-------
+
+    =====EXAMPLE5=====
+    REF homozygous
+    MUT heterozygous
+    SNP in ORI different to REF
+    SNP in REF partially different to MUT
+    This is not a SNP event
+
+    ORI ------C-------
+        ------C-------
+
+    REF ------G-------
+        ------G-------
+
+    MUT ------A-------
+        ------G-------
+
+The three criteria are implemented together.
+
+1. `mutant sample` must be covered to a depth of >= 1 read.
+2. At least one `reference control` must be covered to a depth of >= 1 read.
+3. If the `reference control` is multiallelic for a SNP, it should not match the `mutant sample`.
+
 .. code-block:: shell
 
-    # Function to process a single mutant
-    process_mutant() {
-        local mutant=$1
-        local normal_dir="${RESULTS_DIR}/04_normalised"
-        local merged_dir="${RESULTS_DIR}/05_samples_merged"
-        local output_dir="${RESULTS_DIR}/06_mutant_analysed"
-        
-        # First normalize all VCFs that will be merged (mutant + all references)
-        echo "Normalizing VCFs before merging..."
+    find_candidates_vcf() {
+        local sample=$1
+        local input_dir="${RESULTS_DIR}/06_snps_filtered/"
+        local output_dir="${RESULTS_DIR}/07_mutant_analysed/"
 
-        ALL_SAMPLES=("${MUT_SAMPLES[@]}" "${REF_SAMPLES[@]}")
-        for sample in "${ALL_SAMPLES[@]}"; do
-            normalise_vcf $sample
-        done
+        NUM_REFS=${#REF_SAMPLES[@]}
 
-        echo "Processing mutant: $mutant against all references"
-
-        # Create VCF list for this mutant + all references (using normalized files)
-        VCF_LIST="${normal_dir}/${mutant}.vcf.gz"
-        for ref in "${REF_SAMPLES[@]}"; do
-            VCF_LIST="${VCF_LIST} ${normal_dir}/${ref}.vcf.gz"
-        done
-        
-        # Merge this mutant with all references
-        echo "Merging ${mutant} with references..."
-        bcftools merge ${VCF_LIST} --threads ${THREADS} \
-            --write-index -Ob -o "${output_dir}/${mutant}.vcf.gz"
-        
-        # Filter for SNPs only
-        echo "Filtering SNPs for ${mutant}..."
-        bcftools view -v snps "${output_dir}/${mutant}_merged.vcf" \
-            --threads ${THREADS} -o "${output_dir}/${mutant}_snps.vcf"
-        
-        # Generate dynamic filter expressions
-        NUM_REFS=${#REFERENCE_SAMPLES[@]}
-        
-        # Build genotype filter (mutant=1/1, all refs don't contain "1")
-        GT_FILTER='GT[0]="1/1"'
-        for ((i=1; i<=NUM_REFS; i++)); do
-            GT_FILTER="${GT_FILTER} && GT[${i}]!~\"1\""
-        done
-        
-        # Build depth filter (at least one ref has DP>=1)
-        DP_FILTER=""
+        # mutant AND at least one ref has >=1 read depth
+        DP_FILTER="FORMAT/DP[0]>=1"
         for ((i=1; i<=NUM_REFS; i++)); do
             if [ $i -eq 1 ]; then
-                DP_FILTER="FORMAT/DP[${i}]>=1"
+                DP_FILTER="${DP_FILTER} && (FORMAT/DP[${i}]>=1"
             else
                 DP_FILTER="${DP_FILTER} || FORMAT/DP[${i}]>=1"
             fi
         done
-        
-        # Combine filters
-        STRICT_FILTER="${GT_FILTER} && (${DP_FILTER})"
-        
-        echo "Applying strict candidate filter for ${mutant}..."
-        bcftools filter -i "${STRICT_FILTER}" \
-            "${output_dir}/${mutant}_snps.vcf" \
-            --threads ${THREADS} \
-            -o "${output_dir}/${mutant}_strict_candidates.vcf"
-        
-        # Generate AF filter for mutant (high AF) and refs (low AF)
-        AF_FILTER='FORMAT/AD[0:1]/(FORMAT/AD[0:0]+FORMAT/AD[0:1]) >= 0.8'
-        
+        # the trailing bracket isnt a typo btw
+        DP_FILTER="${DP_FILTER})"
+
+        # instead of a strict genotyping, we relax thresholds
+        # this more effectively approximates genotype instead
+        # mutant needs read depth of >= 0.85 and refs <= 0.15
+        AF_FILTER='FORMAT/AD[0:1]/(FORMAT/AD[0:0]+FORMAT/AD[0:1]) >= 0.85'
         for ((i=1; i<=NUM_REFS; i++)); do
-            AF_FILTER="${AF_FILTER} && FORMAT/AD[${i}:1]/(FORMAT/AD[${i}:0]+FORMAT/AD[${i}:1]) <= 0.15"
-        done
-        
-        echo "Applying allele frequency filter for ${mutant}..."
-        bcftools filter -i "${AF_FILTER}" \
-            "${output_dir}/${mutant}_strict_candidates.vcf" \
-            --threads ${THREADS} \
-            -o "${output_dir}/${mutant}_af_filtered.vcf"
-        
-        # Clean up intermediate files for this mutant
-        rm -f "${output_dir}/${mutant}_normalized.vcf" "${output_dir}/${mutant}_merged.vcf" "${output_dir}/${mutant}_snps.vcf" "${output_dir}/${mutant}_strict_candidates.vcf"
-        
-        # Clean up normalized reference files (they'll be recreated for the next mutant)
-        for ref in "${REFERENCE_SAMPLES[@]}"; do
-            rm -f "${output_dir}/${ref}_normalized.vcf"
-        done
-        
-        echo "Completed analysis for mutant: $mutant"
+            # Missing data in references = assumed reference (good)
+            # Only filter if there IS alt allele data and it's too high
+            AF_FILTER="${AF_FILTER} && (FORMAT/AD[${i}:1]=\".\" || FORMAT/AD[${i}:0]=\".\" || FORMAT/AD[${i}:1]/(FORMAT/AD[${i}:0]+FORMAT/AD[${i}:1]) <= 0.15)"
+        done        
+
+        # combine filters
+        STRICT_FILTER="(${DP_FILTER}) && (${AF_FILTER})"
+
+        bcftools filter -i "${STRICT_FILTER}" --threads ${THREADS} \
+            "${input_dir}/${sample}.vcf.gz" -Ob -o "${output_dir}/${sample}.vcf.gz"
     }
-
-    # Process mutants sequentially
-    for mutant in "${MUTANT_SAMPLES[@]}"; do
-        process_mutant $mutant
+    
+    for sample in "${MUT_SAMPLES[@]}"; do 
+        snps_vcf $sample
     done
-
-    echo "Per-mutant analysis completed"
-
-The remaining steps are performed sequentially for each sample.
-
-
-
-Strict candidate pipeline F0-F2
-+++++++++++++++++++++++++++++++
-
-
-Merge files with refs
-+++++++++++++++++++++
-
-For each sample, merge the four references:
-- TL2209397-ENUref-Female.vcf.gz
-- TL2209398-ENUref-Male.vcf.gz
-- TL2209399-TUref-Female.vcf.gz
-- TL2209400-TUref-Male.vcf.gz
-
-For one example:
-
-.. code-block:: shell
-
-    THREADS=16
-    REF_PATHS="../results/VCF_ChrFixed/TL2209397-ENUref-Female.vcf.gz
-    ../results/VCF_ChrFixed/TL2209398-ENUref-Male.vcf.gz
-    ../results/VCF_ChrFixed/TL2209399-TUref-Female.vcf.gz
-    ../results/VCF_ChrFixed/TL2209400-TUref-Male.vcf.gz"
-
-    bcftools merge --threads ${THREADS} \
-        ../results/VCF_ChrFixed/TL2312073-163-4L.vcf.gz ${REF_PATHS} \
-        -Ob -o ../results/VCF_Merged/TL2312073-163-4L.vcf.gz
-    bcftools index --threads ${THREADS} -t \
-        ../results/VCF_Merged/TL2312073-163-4L.merged.vcf.gz
-
-For an example on all samples:
-
-.. code-block:: shell
-
-    THREADS=16
-    INFILE_DIR="../results/VCF_ChrFixed/*gz"
-    OUTFILE_DIR="../results/VCF_Merged/"
-    REF_PATHS="../results/VCF_ChrFixed/TL2209397-ENUref-Female.vcf.gz
-    ../results/VCF_ChrFixed/TL2209398-ENUref-Male.vcf.gz
-    ../results/VCF_ChrFixed/TL2209399-TUref-Female.vcf.gz
-    ../results/VCF_ChrFixed/TL2209400-TUref-Male.vcf.gz"
-
-    find ${INFILE_DIR} | grep -v 'ref' | \
-        while IFS="\t" read -r line; do
-            in=$(echo $line)
-            out=${OUTFILE_DIR}$(basename ${in})
-            bcftools merge --threads ${THREADS} \
-                ${in} ${REF_PATHS} -Ob -o ${out}
-            bcftools index --threads ${THREADS} -t ${out}
-        done
-
-Filter out non-SNPs
-+++++++++++++++++++
-
-For one example:
-
-.. code-block:: shell
-
-    THREADS=16
-    bcftools view --threads ${THREADS} -v snps \
-        ../results/VCF_Merged/TL2312073-163-4L.vcf.gz \
-        -Ob -o ../results/VCF_Snps/TL2312073-163-4L.vcf.gz
-    bcftools index --threads ${THREADS} -t \
-        ../results/VCF_SNPs/TL2312073-163-4L.vcf.gz
-
-For an example on all samples:
-
-.. code-block:: shell
-
-    THREADS=16
-    INFILE_DIR="../results/VCF_Merged/*gz"
-    OUTFILE_DIR="../results/VCF_Snps/"
-
-    find ${INFILE_DIR} | sort | \
-        while IFS="\t" read -r line; do
-            in=$(echo $line)
-            out=${OUTFILE_DIR}$(basename ${in})
-            bcftools view --threads ${THREADS} -v snps \
-                ${in} -Ob -o ${out}
-            bcftools index --threads ${THREADS} -t ${out}
-        done
-
-Obtain SNPs which occur in the sample but not the references
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 .. raw:: html
 
