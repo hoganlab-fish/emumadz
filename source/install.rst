@@ -63,6 +63,7 @@ ENSEMBL's Variant Effect Predictor ``VEP`` requires::
   perl-json==4.10
   perl-perlio-gzip==0.20
   perl-bio-bigfile==1.07
+  perl-list-moreutils
 
 `You can follow the install instructions on their github`_, or use the ``conda`` or ``docker`` environments provided.
 
