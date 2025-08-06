@@ -472,6 +472,31 @@ Each sample occupies the first slot in the vcf sample columns, followed by the r
         merge_vcf $sample
     done
 
+
+Filter for SNP only events
+++++++++++++++++++++++++++
+
+Other mutations are not of interest since ENU induces point mutations.
+
+.. code-block:: shell
+
+    snps_vcf() {
+        local sample=$1
+        local input_dir="${RESULTS_DIR}/05_samples_merged/"
+        local output_dir="${RESULTS_DIR}/06_snps_filtered/"
+
+        # filter for SNPs only
+        echo "Filtering SNPs for ${mutant}..."
+        bcftools view -v snps --threads ${THREADS} \
+            "${input_dir}/${sample}.vcf" \
+            --write-index -Ob -o "${output_dir}/${sample}.vcf.gz"
+    }
+    
+    for sample in "${MUT_SAMPLES[@]}"; do 
+        snps_vcf $sample
+    done
+
+
 .. code-block:: shell
 
     # Function to process a single mutant
