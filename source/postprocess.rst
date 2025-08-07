@@ -742,10 +742,29 @@ We run ``snpEff`` to screen for SNPs which are predicted to be impactful. Annota
     snpEff -i vcf -v Zv9.75 TL2312073-163-4L.vcf.gz > bar.vcf
 
 
-VEP + snpEff
-************
+Combine SNP annotations
+***********************
 
+Both ``VEP`` and ``snpEff`` annotations are now available. These are recombined so that the aggregated information is available in one file. Note that we split the ``VEP`` and ``snpEff`` steps for efficiency, but running either method sequentially will obtain the same result.
 
+.. code-block:: shell
+
+    annot_all() {
+        local sample=$1
+        local annot_eff="${RESULTS_DIR}/08_annot_eff/"
+        local annot_vep="${RESULTS_DIR}/08_annot_vep/"
+        local output_dir="${RESULTS_DIR}/09_finalised/"
+
+        bcftools merge --threads ${THREADS} --write-index \
+            --force-samples \
+            ${annot_vep}/${sample}.vcf.gz \
+            ${annot_eff}/${sample}.vcf.gz \
+            -Ob -o ${output_dir}/${sample}.vcf.gz
+    }
+    
+    for sample in "${MUT_SAMPLES[@]}"; do 
+        annot_all $sample
+    done
 
 Filter by SNP impact
 ++++++++++++++++++++
