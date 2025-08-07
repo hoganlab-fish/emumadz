@@ -651,18 +651,34 @@ The three criteria are implemented together.
 Screen impact of SNP
 ++++++++++++++++++++
 
-Either ``VEP`` or ``snpEff`` will produce similarly formatted results. Here we use ``VEP``, which has improved performance in non-coding regions.
+Either ``VEP`` or ``snpEff`` will produce similarly formatted results. We run both separately and combine their annotations at the end.
 
 VEP
 ***
 
-We run ENSEMBL's variant effect predictor ``VEP`` on the data. Install instructions are provided separately. In this case we used the specific cache which can be obtained by:
+We run ENSEMBL's variant effect predictor ``VEP`` on the data. Install instructions are provided separately on our install page.
 
 .. code-block:: shell
 
-    wget 'https://ftp.ensembl.org/pub/release-79/variation/VEP/danio_rerio_merged_vep_79_Zv9.tar.gz'
+    vep \
+        --cache \
+        --dir_cache ~/.vep/ \
+        --species danio_rerio \
+        --assembly Zv9 \
+        --cache_version 79 \
+        --offline \
+        --regulatory \
+        --vcf \
+        --fork 16 \
+        --buffer_size 8192 \      
+        --stats_html \
+        --stats_text \
+        --force_overwrite \
+        --compress_output bgzip \
+        --input_file /path/to/input.vcf.gz \
+        --output_file /path/to/output.vcf.gz
 
-`To be written`
+
 
 snpEff
 ******

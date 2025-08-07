@@ -44,27 +44,101 @@ Install the provided `conda` environment.
 Manual
 ++++++
 
+Base software
+*************
+
 The critical packages and their version numbers are listed below for reference::
 
     bcftools==1.19-gcc-13.2.0
     gatk/4.5.0.0-gcc-13.2.0
-    nextflow==25.04.2.5947
     pandas==2.3.0
     python==3.13.3
     samtools==1.19.2-gcc-13.2.0
 
-ENSEMBL's Variant Effect Predictor ``VEP`` requires::
+    snpeff==5.2
+    ensembl-vep==114.2
 
-  perl==5.32.1
-  perl-dbi==1.643
-  perl-archive-zip==1.6.8
-  perl-dbd-mysql==4.050
-  perl-set-intervaltree==0.12
-  perl-json==4.10
-  perl-perlio-gzip==0.20
-  perl-bio-bigfile==1.07
-  perl-list-moreutils
 
-`You can follow the install instructions on their github`_, or use the ``conda`` or ``docker`` environments provided.
+
+
+Variant annotators
+******************
+
+snpEff
+######
+
+
+
+VEP
+###
+
+`You can follow the install instructions on their github`_, or use the ``conda`` / ``docker`` environments provided.
 
 .. _You can follow the install instructions on their github: https://github.com/Ensembl/ensembl-vep
+
+Manually install the following libraries if you are running their ``INSTALL.pl`` script:
+
+.. code-block:: shell
+
+    perl==5.32.1
+    perl-dbi==1.643
+    perl-archive-zip==1.6.8
+    perl-dbd-mysql==4.050
+    perl-set-intervaltree==0.12
+    perl-json==4.10
+    perl-perlio-gzip==0.20
+    perl-bio-bigfile==1.07
+    perl-list-moreutils==0.430
+
+Regardless of container or install method used, additional setup is required for the offline cache to work.
+1. First, download the cache corresponding to the latest zebrafish ``Zv9`` assembly ``ENSEMBL 79``.
+2. Unpack, rename and move the cache to its required location.
+During use, you will need to provide specific options.
+
+.. note::
+  
+    We want the regulatory regions also, so we get the merged tarball specifically.
+
+.. caution::
+
+    The cache directory defaults to ``~/.vep``, but suggest saving your downloaded cache files elsewhere as home directory usually has limited storage. You can then symlink the cache files to the directory. For example:
+
+        .. code-block:: shell
+
+            cd /place/with/storage/
+            mkdir .vep
+            mv my_cache_dir /place/with/storage/.vep/
+            cd ~ && ln -s /place/with/storage/.vep
+            
+
+.. code-block:: shell
+
+    # get cache
+    wget 'https://ftp.ensembl.org/pub/release-79/variation/VEP/danio_rerio_merged_vep_79_Zv9.tar.gz'
+    tar -xzvf danio_rerio_merged_vep_79_Zv9.tar.gz
+
+    # if a cache dir isnt generated, this will default to ~/.vep
+    # the directory must be renamed to drop the trailing _merged
+    mv danio_rerio_merged ~/.vep/danio_rerio
+
+    # then this should work, note that these specific options are required
+    # [--cache --dir_cache --species --assembly --cache_version --offline]
+    vep \
+      --cache \
+      --dir_cache ~/.vep/ \
+      --species danio_rerio \
+      --assembly Zv9 \
+      --cache_version 79 \
+      --offline \
+      --regulatory \
+      --vcf \
+      ... \
+      --input_file /path/to/input.vcf \
+      --output_file /path/to/output.vcf
+    
+
+.. caution::
+    There may be problems if there is conflict between VEP version, genome version and chromosome nomenclature. If you get any errors please check your files and `follow the guidelines on the ENSEMBL-VEP website`_.
+
+.. _follow the guidelines on the ENSEMBL-VEP website: https://asia.ensembl.org/info/docs/tools/vep/script/vep_download.html
+
