@@ -180,7 +180,7 @@ Here we setup the file structure and some other metadata.
         echo "${#REF_SAMPLES[@]} references: ${REF_SAMPLES[@]}"
 
         # create results directory structure
-        mkdir -p ${RESULTS_DIR}/{01_variant_called,02_chromosome_filtered,03_stringent_filtered,04_normalised,05_samples_merged,06_snps_filtered,07_mutant_analysed,08_annotated,09_finalised}
+        mkdir -p ${RESULTS_DIR}/{01_variant_called,02_chromosome_filtered,03_stringent_filtered,04_normalised,05_samples_merged,06_snps_filtered,07_mutant_candidates,08_annot_eff,08_annot_vep,08_annot_all,09_finalised}
 
         # set downstream directories and suffixes
         # if step 3 is actioned, edit these as needed
@@ -482,9 +482,9 @@ Other mutations are not of interest since `N`-ethyl-`N`-nitrosourea (ENU) used i
         local output_dir="${RESULTS_DIR}/06_snps_filtered/"
 
         # filter for SNPs only
-        echo "Filtering SNPs for ${mutant}..."
+        echo "Filtering SNPs for ${sample}..."
         bcftools view -v snps --threads ${THREADS} \
-            "${input_dir}/${sample}.vcf" \
+            "${input_dir}/${sample}.vcf.gz" \
             --write-index -Ob -o "${output_dir}/${sample}.vcf.gz"
     }
     
@@ -505,7 +505,27 @@ Beyond this, a light mapping quality filter was implemented during the variant c
 
 The `reference control` may be for example a grandparent or a wild-type sibling. The pipeline is agnostic to input and will run regardless. An arbitrary number of `reference controls` can be used.
 
-We expand on the concept of multiallelic SNP events with some examples:
+We explain the criteria above with some examples.
+
+Showing the concept of coverage in (1) and (2)::
+
+    MUT SAMPLE           PASS                FAIL                PASS
+
+        MAPPED      --------------                          --------------
+        GENOME      ==============      ==============      ==============
+    
+    REF CONTROL 1   
+
+        MAPPED      --------------                          --------------
+        GENOME      ==============      ==============      ==============
+    
+    REF CONTROL 2
+
+        MAPPED      --------------      
+        GENOME      ==============      ==============      ==============
+
+
+Showing the concept of multiallelic SNP events in (3):
 - ORI is the `true original` 
 - REF is the `reference control`
 - MUT is the `mutant sample`
@@ -610,7 +630,7 @@ The three criteria are implemented together.
     find_candidates_vcf() {
         local sample=$1
         local input_dir="${RESULTS_DIR}/06_snps_filtered/"
-        local output_dir="${RESULTS_DIR}/07_mutant_analysed/"
+        local output_dir="${RESULTS_DIR}/07_mutant_candidates/"
 
         NUM_REFS=${#REF_SAMPLES[@]}
 
@@ -660,6 +680,7 @@ We run ENSEMBL's variant effect predictor ``VEP`` on the data. Install instructi
 
 .. code-block:: shell
 
+    # since there are a lot of parameters, we list them all here independently
     vep \
         --cache \
         --dir_cache ~/.vep/ \
@@ -678,7 +699,21 @@ We run ENSEMBL's variant effect predictor ``VEP`` on the data. Install instructi
         --input_file /path/to/input.vcf.gz \
         --output_file /path/to/output.vcf.gz
 
+    annot_vep() {
+        local sample=$1
+        local input_dir="${RESULTS_DIR}/07_mutant_candidates/"
+        local output_dir="${RESULTS_DIR}/08_annot_vep/"
 
+        # filter for SNPs only
+        echo "Filtering SNPs for ${sample}..."
+        bcftools view -v snps --threads ${THREADS} \
+            "${input_dir}/${sample}.vcf.gz" \
+            --write-index -Ob -o "${output_dir}/${sample}.vcf.gz"
+    }
+    
+    for sample in "${MUT_SAMPLES[@]}"; do 
+        snps_vcf $sample
+    done
 
 snpEff
 ******
@@ -697,6 +732,11 @@ We run ``snpEff`` to screen for SNPs which are predicted to be impactful. Annota
 
     # SnpEff version SnpEff 5.2 (build 2023-09-29 06:17)
     snpEff -i vcf -v Zv9.75 TL2312073-163-4L.vcf.gz > bar.vcf
+
+
+VEP + snpEff
+************
+
 
 
 Filter by SNP impact
