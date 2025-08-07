@@ -162,8 +162,16 @@ Here we setup the file structure and some other metadata.
 
         # various configuration variables
         THREADS=16
+
+        # GATK
         GATK_MEM="64g"
         GATK_JAVA_OPTS="-Xmx${GATK_MEM} -XX:+UseParallelGC"
+
+        # ENSEMBL VEP
+        VEP_ASSEMBLY="Zv9"
+        VEP_VERSION="79"
+        VEP_CACHE="~/.vep"
+        VEP_BUFFER="8192"
 
         # paths relative to source directory
         DATA_DIR="../data/"
@@ -678,41 +686,39 @@ VEP
 
 We run ENSEMBL's variant effect predictor ``VEP`` on the data. Install instructions are provided separately on our install page.
 
-.. code-block:: shell
+.. important::
+    Since we are using an ancient zebrafish genome, a specific combination of settings must be used. A prerequisite is installing an older cached version of the genome, which is covered in the install section. If this was not done, it is unlikely that ``VEP`` will work as intended.
 
-    # since there are a lot of parameters, we list them all here independently
-    vep \
-        --cache \
-        --dir_cache ~/.vep/ \
-        --species danio_rerio \
-        --assembly Zv9 \
-        --cache_version 79 \
-        --offline \
-        --regulatory \
-        --vcf \
-        --fork 16 \
-        --buffer_size 8192 \      
-        --stats_html \
-        --stats_text \
-        --force_overwrite \
-        --compress_output bgzip \
-        --input_file /path/to/input.vcf.gz \
-        --output_file /path/to/output.vcf.gz
+.. code-block:: shell
 
     annot_vep() {
         local sample=$1
         local input_dir="${RESULTS_DIR}/07_mutant_candidates/"
         local output_dir="${RESULTS_DIR}/08_annot_vep/"
 
-        # filter for SNPs only
-        echo "Filtering SNPs for ${sample}..."
-        bcftools view -v snps --threads ${THREADS} \
-            "${input_dir}/${sample}.vcf.gz" \
-            --write-index -Ob -o "${output_dir}/${sample}.vcf.gz"
+        echo "Predicting variant impact for ${sample}..."
+        vep \
+            --cache \
+            --dir_cache ${VEP_CACHE} \
+            --species danio_rerio \
+            --assembly ${VEP_ASSEMBLY} \
+            --cache_version ${VEP_VERSION} \
+            --offline \
+            --regulatory \
+            --vcf \
+            --variant_class \
+            --fork ${THREADS} \
+            --buffer_size ${VEP_BUFFER} \      
+            --stats_html \
+            --stats_text \
+            --force_overwrite \
+            --compress_output bgzip \
+            --input_file "${input_dir}/${sample}.vcf.gz" \
+            --output_file "${output_dir}/${sample}.vcf.gz"
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do 
-        snps_vcf $sample
+        annot_vep $sample
     done
 
 snpEff
