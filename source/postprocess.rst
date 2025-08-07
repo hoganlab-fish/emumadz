@@ -491,7 +491,7 @@ Other mutations are not of interest since `N`-ethyl-`N`-nitrosourea (ENU) used i
 
         # filter for SNPs only
         echo "Filtering SNPs for ${sample}..."
-        bcftools view -v snps --threads ${THREADS} \
+        bcftools view -i 'TYPE="snp"' --threads ${THREADS} \
             "${input_dir}/${sample}.vcf.gz" \
             --write-index -Ob -o "${output_dir}/${sample}.vcf.gz"
     }
