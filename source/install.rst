@@ -64,15 +64,21 @@ The critical packages and their version numbers are listed below for reference::
 Variant annotators
 ******************
 
-snpEff
-######
-
-
-
 VEP
 ###
 
-`You can follow the install instructions on their github`_, or use the ``conda`` / ``docker`` environments provided.
+`For a manual install, you can follow the install instructions on their github`_, or use the ``conda`` / ``docker`` environments provided.
+
+.. note::
+
+    The ``conda`` environment is maintained by a third party unaffiliated with the authors. If that does not work, try building from source or using the official container instead.
+
+.. code-block:: shell
+
+    conda install bioconda::ensembl-vep
+
+    apptainer pull --name vep.sif docker://ensemblorg/ensembl-vep
+    singularity pull --name vep.sif docker://ensemblorg/ensembl-vep
 
 .. _You can follow the install instructions on their github: https://github.com/Ensembl/ensembl-vep
 
@@ -123,6 +129,7 @@ During use, you will need to provide specific options.
 
     # then this should work, note that these specific options are required
     # [--cache --dir_cache --species --assembly --cache_version --offline]
+    # this will be covered in detail in the relevant documentation section
     vep \
       --cache \
       --dir_cache ~/.vep/ \
@@ -142,3 +149,25 @@ During use, you will need to provide specific options.
 
 .. _follow the guidelines on the ENSEMBL-VEP website: https://asia.ensembl.org/info/docs/tools/vep/script/vep_download.html
 
+snpEff
+######
+
+Recommend installing through ``conda``.
+
+.. code-block:: shell
+
+    conda install bioconda::snpeff
+
+.. warning::
+
+    Manually installing this software is not recommended.
+
+`If necessary, follow the instructions on the website`_.
+
+.. _If necessary, follow the instructions on the website: https://pcingola.github.io/SnpEff/snpeff/introduction/
+
+You will need to download the corresponding zebrafish genome database. If install is successful, run the code below.
+
+.. code-block:: shell
+  
+    snpEff download Zv9.75
