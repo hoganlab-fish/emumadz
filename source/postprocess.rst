@@ -790,8 +790,7 @@ Both ``VEP`` and ``snpEff`` annotations are now available. These are recombined 
         bcftools merge --threads ${THREADS} \
             --force-samples \
             ${annot_vep}/${sample}.vcf.gz \
-            ${annot_eff}/${sample}.vcf.gz | \
-        bcftools view -i 'TYPE="snp"' --threads ${THREADS} \
+            ${annot_eff}/${sample}.vcf.gz \
             --write-index -Ob -o ${output_dir}/${sample}.vcf.gz
     }
     
@@ -801,4 +800,6 @@ Both ``VEP`` and ``snpEff`` annotations are now available. These are recombined 
 
 Filter by SNP impact
 ++++++++++++++++++++
+
+Remaining steps are associated with parsing the vcf into a human-readable format for visualisation.
 
