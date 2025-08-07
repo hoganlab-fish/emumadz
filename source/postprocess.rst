@@ -170,7 +170,7 @@ Here we setup the file structure and some other metadata.
         # ENSEMBL VEP
         VEP_ASSEMBLY="Zv9"
         VEP_VERSION="79"
-        VEP_CACHE="~/.vep"
+        VEP_CACHE="${HOME}/.vep"
         VEP_BUFFER="8192"
 
         # paths relative to source directory
@@ -667,7 +667,7 @@ The three criteria are implemented together.
         # combine filters
         STRICT_FILTER="(${DP_FILTER}) && (${AF_FILTER})"
 
-        bcftools filter -i "${STRICT_FILTER}" --threads ${THREADS} \
+        bcftools filter -i "${STRICT_FILTER}" --threads ${THREADS} --write_index \
             "${input_dir}/${sample}.vcf.gz" -Ob -o "${output_dir}/${sample}.vcf.gz"
     }
     
@@ -715,6 +715,8 @@ We run ENSEMBL's variant effect predictor ``VEP`` on the data. Install instructi
             --compress_output bgzip \
             --input_file "${input_dir}/${sample}.vcf.gz" \
             --output_file "${output_dir}/${sample}.vcf.gz"
+        bcftools index --threads ${THREADS} \
+            "${output_dir}/${sample}.vcf.gz"            
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do 
