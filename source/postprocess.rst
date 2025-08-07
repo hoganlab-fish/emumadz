@@ -111,7 +111,7 @@ Software requirements:
 - snpEff
 
 .. note::
-    Here we assume that ``bcftools,gatk,samtools,snpEff`` are all installed. Refer back to the installation instructions for how to install these.
+    Here we assume that ``bcftools,gatk,samtools,snpEff`` are all installed and the user has completed the steps in the install instructions.
 
 Data requirements:
 - Reference genome fasta file
@@ -172,6 +172,10 @@ Here we setup the file structure and some other metadata.
         VEP_VERSION="79"
         VEP_CACHE="${HOME}/.vep"
         VEP_BUFFER="8192"
+
+        # snpEff
+        SNPEFF_CONFIG="/home/tchen/.local/share/mamba/envs/snps/share/snpeff-5.2-1/snpEff.config"
+        SNPEFF_GENOME="Zv9.75"
 
         # paths relative to source directory
         DATA_DIR="../data/"
@@ -739,8 +743,36 @@ We run ``snpEff`` to screen for SNPs which are predicted to be impactful. Annota
 .. code-block:: shell
 
     # SnpEff version SnpEff 5.2 (build 2023-09-29 06:17)
-    snpEff -i vcf -v Zv9.75 TL2312073-163-4L.vcf.gz > bar.vcf
+    snpEff download Zv9.75
 
+    annot_eff() { 
+        local sample=$1
+        local input_dir="${RESULTS_DIR}/07_mutant_candidates/"
+        local output_dir="${RESULTS_DIR}/08_annot_eff/"
+
+        export JAVA_OPTIONS="-Xms512m -Xmx16g"
+
+        csv_stat=${output_dir}/${sample}.csv
+        fas_prot=${output_dir}/${sample}.fa
+        web_stat=${output_dir}/${sample}.html
+        out_path=${output_dir}/${sample}.vcf
+
+        snpEff \
+            -c "${SNPEFF_CONFIG}" \
+            -csvStats "${csv_stat}" \
+            -i vcf \
+            -o vcf \
+            -fastaProt "${fas_prot}" \
+            -s "${web_stat}" \
+            "${SNPEFF_GENOME}" \
+            "${input_dir}/${sample}.vcf.gz" > "${out_path}"
+        bgzip -@ ${THREADS} ${out_path}
+        bcftools index --threads ${THREADS} ${out_path}.gz
+    }
+
+    for sample in "${MUT_SAMPLES[@]}"; do 
+        annot_eff $sample
+    done
 
 Combine SNP annotations
 ***********************
@@ -755,11 +787,12 @@ Both ``VEP`` and ``snpEff`` annotations are now available. These are recombined 
         local annot_vep="${RESULTS_DIR}/08_annot_vep/"
         local output_dir="${RESULTS_DIR}/09_finalised/"
 
-        bcftools merge --threads ${THREADS} --write-index \
+        bcftools merge --threads ${THREADS} \
             --force-samples \
             ${annot_vep}/${sample}.vcf.gz \
-            ${annot_eff}/${sample}.vcf.gz \
-            -Ob -o ${output_dir}/${sample}.vcf.gz
+            ${annot_eff}/${sample}.vcf.gz | \
+        bcftools view -i 'TYPE="snp"' --threads ${THREADS} \
+            --write-index -Ob -o ${output_dir}/${sample}.vcf.gz
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do 
