@@ -708,7 +708,7 @@ We run ENSEMBL's variant effect predictor ``VEP`` on the data. Install instructi
             --vcf \
             --variant_class \
             --fork ${THREADS} \
-            --buffer_size ${VEP_BUFFER} \      
+            --buffer_size ${VEP_BUFFER} \
             --stats_html \
             --stats_text \
             --force_overwrite \
