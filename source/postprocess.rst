@@ -785,7 +785,7 @@ Both ``VEP`` and ``snpEff`` annotations are now available. These are recombined 
         local sample=$1
         local annot_eff="${RESULTS_DIR}/08_annot_eff/"
         local annot_vep="${RESULTS_DIR}/08_annot_vep/"
-        local output_dir="${RESULTS_DIR}/09_finalised/"
+        local output_dir="${RESULTS_DIR}/08_annot_all/"
 
         bcftools merge --threads ${THREADS} \
             --force-samples \
