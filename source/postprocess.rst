@@ -834,13 +834,13 @@ Here we parse the final ``vcf`` files into a format suitable for visualisation.
         local infile_dir="${RESULTS_DIR}/08_annot_all/"
         local outfile_dir="${RESULTS_DIR}/10_visualisations/"
 
-        python parse_vcf.py 
+        python parse_vcf.py \
             "${infile_dir}/${sample}.vcf.gz" \
             "${SAMPLESHEET}" \
             "${outfile_dir}/${sample}.csv" \
             --subset_path "${outfile_dir}/${sample}.bam" \
             --subset_workers ${THREADS} \
-            --coverage_report "${outfile_dir}/${sample}_coverage.csv"
+            --coverage_report "${outfile_dir}/${sample}_coverage.csv" \
             --chrom_mapping ${CHROM_MAP}
     }
     
