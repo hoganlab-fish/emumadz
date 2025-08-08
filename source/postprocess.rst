@@ -192,7 +192,7 @@ Here we setup the file structure and some other metadata.
         echo "${#REF_SAMPLES[@]} references: ${REF_SAMPLES[@]}"
 
         # create results directory structure
-        mkdir -p ${RESULTS_DIR}/{01_variant_called,02_chromosome_filtered,03_stringent_filtered,04_normalised,05_samples_merged,06_snps_filtered,07_mutant_candidates,08_annot_eff,08_annot_vep,08_annot_all,09_finalised}
+        mkdir -p ${RESULTS_DIR}/{01_variant_called,02_chromosome_filtered,03_stringent_filtered,04_normalised,05_samples_merged,06_snps_filtered,07_mutant_candidates,08_annot_eff,08_annot_vep,08_annot_all,09_finalised,10_visualisations}
 
         # set downstream directories and suffixes
         # if step 3 is actioned, edit these as needed
@@ -309,16 +309,16 @@ We filter the ``bam`` files for low quality reads and perform variant calling si
     # Function to apply GATK hard filters
     apply_stringent_filters() {
         local sample=$1
-        local input_dir="${RESULTS_DIR}/02_chromosome_filtered"
-        local output_dir="${RESULTS_DIR}/03_stringent_filtered"
+        local infile_dir="${RESULTS_DIR}/02_chromosome_filtered"
+        local outfile_dir="${RESULTS_DIR}/03_stringent_filtered"
         
         echo "Applying hard filters to: $sample"
         
         # Apply GATK hard filters
         gatk --java-options "${GATK_JAVA_OPTS}" VariantFiltration \
             -R ${REFERENCE_FA} \
-            -V "${input_dir}/${sample}.vcf" \
-            -O "${output_dir}/${sample}_filtered.vcf" \
+            -V "${infile_dir}/${sample}.vcf" \
+            -O "${outfile_dir}/${sample}_filtered.vcf" \
             --filter-expression "QD < 2.0" --filter-name "QD2" \
             --filter-expression "QUAL < 30.0" --filter-name "QUAL30" \
             --filter-expression "SOR > 3.0" --filter-name "SOR3" \
@@ -330,12 +330,12 @@ We filter the ``bam`` files for low quality reads and perform variant calling si
         # select only PASS variants
         gatk --java-options "${GATK_JAVA_OPTS}" SelectVariants \
             -R ${REFERENCE_FA} \
-            -V "${output_dir}/${sample}_filtered.vcf" \
-            -O "${output_dir}/${sample}.vcf" \
+            -V "${outfile_dir}/${sample}_filtered.vcf" \
+            -O "${outfile_dir}/${sample}.vcf" \
             --exclude-filtered
         
         # clean up intermediate files
-        rm -f "${output_dir}/${sample}_filtered.vcf"
+        rm -f "${outfile_dir}/${sample}_filtered.vcf"
         
         echo "Completed stringent filtering for: $sample"
     }
@@ -365,8 +365,8 @@ At the same time, we are only interested in the chromosomes, which start with ``
 
     filter_and_rename_chromosomes() {
         local sample=$1
-        local input_dir="${RESULTS_DIR}/01_variant_called"
-        local output_dir="${RESULTS_DIR}/02_chromosome_filtered"
+        local infile_dir="${RESULTS_DIR}/01_variant_called"
+        local outfile_dir="${RESULTS_DIR}/02_chromosome_filtered"
         
         echo "Filtering chromosomes for: $sample"
         # 33550336 use extreme range to cover all
@@ -378,26 +378,26 @@ At the same time, we are only interested in the chromosomes, which start with ``
         # rename all contigs with mapping
         bcftools annotate --threads ${THREADS} \
             --rename-chr ${CHROM_MAP} \
-            ${input_dir}/${sample}_raw.vcf.gz | \
-        grep -v '##contig=<ID=FR' > "${output_dir}/${sample}_reannot.vcf"
+            ${infile_dir}/${sample}_raw.vcf.gz | \
+        grep -v '##contig=<ID=FR' > "${outfile_dir}/${sample}_reannot.vcf"
         
         # filter to main chromosomes only and remove non-chromosomal variants from header
         bcftools view -t $(cut -f1 ${DATA_DIR}/chromosomes.txt | paste -sd,) \
-            "${output_dir}/${sample}_reannot.vcf" \
+            "${outfile_dir}/${sample}_reannot.vcf" \
             --threads ${THREADS} \
-            -o "${output_dir}/${sample}_chr_temp.vcf"
+            -o "${outfile_dir}/${sample}_chr_temp.vcf"
         
         # clean up header to remove non-chromosomal contigs
         bcftools reheader -f ${DATA_DIR}/chromosomes.txt \
-            "${output_dir}/${sample}_chr_temp.vcf" | \
-        bgzip -@ ${THREADS} -c > "${output_dir}/${sample}.vcf.gz"
+            "${outfile_dir}/${sample}_chr_temp.vcf" | \
+        bgzip -@ ${THREADS} -c > "${outfile_dir}/${sample}.vcf.gz"
         
         bcftools index --threads ${THREADS} \
-            "${output_dir}/${sample}.vcf.gz"
+            "${outfile_dir}/${sample}.vcf.gz"
 
         # clean up intermediate files
-        rm -f "${output_dir}/${sample}_reannot.vcf" \
-            "${output_dir}/${sample}_chr_temp.vcf"
+        rm -f "${outfile_dir}/${sample}_reannot.vcf" \
+            "${outfile_dir}/${sample}_chr_temp.vcf"
         
         echo "Completed chromosome filtering for: $sample"
     }
@@ -419,10 +419,10 @@ The aim of the normalisation is to preserve differential events that may occur a
 
     normalise_vcf() {
         local sample=$1
-        local input_dir="${PROCESSED_VCF_DIR}"
-        local output_dir="${RESULTS_DIR}/04_normalised/"
-        local input_vcf="${input_dir}/${sample}.vcf.gz"
-        local output_vcf="${output_dir}/${sample}.vcf.gz"
+        local infile_dir="${PROCESSED_VCF_DIR}"
+        local outfile_dir="${RESULTS_DIR}/04_normalised/"
+        local input_vcf="${infile_dir}/${sample}.vcf.gz"
+        local output_vcf="${outfile_dir}/${sample}.vcf.gz"
         
         echo "Normalising VCF for: $sample"
         
@@ -461,19 +461,19 @@ Each sample occupies the first slot in the vcf sample columns, followed by the r
 
     merge_vcf() {
         local sample=$1
-        local input_dir="${RESULTS_DIR}/04_normalised/"
-        local output_dir="${RESULTS_DIR}/05_samples_merged/"
+        local infile_dir="${RESULTS_DIR}/04_normalised/"
+        local outfile_dir="${RESULTS_DIR}/05_samples_merged/"
 
         # create VCF list for this mutant + all references (using normalised files)
-        VCF_LIST="${input_dir}/${sample}.vcf.gz"
+        VCF_LIST="${infile_dir}/${sample}.vcf.gz"
         for ref in "${REF_SAMPLES[@]}"; do
-            VCF_LIST="${VCF_LIST} ${input_dir}/${ref}.vcf.gz"
+            VCF_LIST="${VCF_LIST} ${infile_dir}/${ref}.vcf.gz"
         done
 
         # merge this mutant with all references
         echo "Merging ${sample} with references..."
         bcftools merge ${VCF_LIST} --threads ${THREADS} --write-index \
-            -Ob -o "${output_dir}/${sample}.vcf.gz"
+            -Ob -o "${outfile_dir}/${sample}.vcf.gz"
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do
@@ -490,14 +490,14 @@ Other mutations are not of interest since `N`-ethyl-`N`-nitrosourea (ENU) used i
 
     snps_vcf() {
         local sample=$1
-        local input_dir="${RESULTS_DIR}/05_samples_merged/"
-        local output_dir="${RESULTS_DIR}/06_snps_filtered/"
+        local infile_dir="${RESULTS_DIR}/05_samples_merged/"
+        local outfile_dir="${RESULTS_DIR}/06_snps_filtered/"
 
         # filter for SNPs only
         echo "Filtering SNPs for ${sample}..."
         bcftools view -i 'TYPE="snp"' --threads ${THREADS} \
-            "${input_dir}/${sample}.vcf.gz" \
-            --write-index -Ob -o "${output_dir}/${sample}.vcf.gz"
+            "${infile_dir}/${sample}.vcf.gz" \
+            --write-index -Ob -o "${outfile_dir}/${sample}.vcf.gz"
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do 
@@ -641,8 +641,8 @@ The three criteria are implemented together.
 
     find_candidates_vcf() {
         local sample=$1
-        local input_dir="${RESULTS_DIR}/06_snps_filtered/"
-        local output_dir="${RESULTS_DIR}/07_mutant_candidates/"
+        local infile_dir="${RESULTS_DIR}/06_snps_filtered/"
+        local outfile_dir="${RESULTS_DIR}/07_mutant_candidates/"
 
         NUM_REFS=${#REF_SAMPLES[@]}
 
@@ -672,7 +672,7 @@ The three criteria are implemented together.
         STRICT_FILTER="(${DP_FILTER}) && (${AF_FILTER})"
 
         bcftools filter -i "${STRICT_FILTER}" --threads ${THREADS} --write_index \
-            "${input_dir}/${sample}.vcf.gz" -Ob -o "${output_dir}/${sample}.vcf.gz"
+            "${infile_dir}/${sample}.vcf.gz" -Ob -o "${outfile_dir}/${sample}.vcf.gz"
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do 
@@ -697,8 +697,8 @@ We run ENSEMBL's variant effect predictor ``VEP`` on the data. Install instructi
 
     annot_vep() {
         local sample=$1
-        local input_dir="${RESULTS_DIR}/07_mutant_candidates/"
-        local output_dir="${RESULTS_DIR}/08_annot_vep/"
+        local infile_dir="${RESULTS_DIR}/07_mutant_candidates/"
+        local outfile_dir="${RESULTS_DIR}/08_annot_vep/"
 
         echo "Predicting variant impact for ${sample}..."
         vep \
@@ -717,10 +717,10 @@ We run ENSEMBL's variant effect predictor ``VEP`` on the data. Install instructi
             --stats_text \
             --force_overwrite \
             --compress_output bgzip \
-            --input_file "${input_dir}/${sample}.vcf.gz" \
-            --output_file "${output_dir}/${sample}.vcf.gz"
+            --input_file "${infile_dir}/${sample}.vcf.gz" \
+            --output_file "${outfile_dir}/${sample}.vcf.gz"
         bcftools index --threads ${THREADS} \
-            "${output_dir}/${sample}.vcf.gz"            
+            "${outfile_dir}/${sample}.vcf.gz"            
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do 
@@ -747,15 +747,15 @@ We run ``snpEff`` to screen for SNPs which are predicted to be impactful. Annota
 
     annot_eff() { 
         local sample=$1
-        local input_dir="${RESULTS_DIR}/07_mutant_candidates/"
-        local output_dir="${RESULTS_DIR}/08_annot_eff/"
+        local infile_dir="${RESULTS_DIR}/07_mutant_candidates/"
+        local outfile_dir="${RESULTS_DIR}/08_annot_eff/"
 
         export JAVA_OPTIONS="-Xms512m -Xmx16g"
 
-        csv_stat=${output_dir}/${sample}.csv
-        fas_prot=${output_dir}/${sample}.fa
-        web_stat=${output_dir}/${sample}.html
-        out_path=${output_dir}/${sample}.vcf
+        csv_stat=${outfile_dir}/${sample}.csv
+        fas_prot=${outfile_dir}/${sample}.fa
+        web_stat=${outfile_dir}/${sample}.html
+        out_path=${outfile_dir}/${sample}.vcf
 
         snpEff \
             -c "${SNPEFF_CONFIG}" \
@@ -765,7 +765,7 @@ We run ``snpEff`` to screen for SNPs which are predicted to be impactful. Annota
             -fastaProt "${fas_prot}" \
             -s "${web_stat}" \
             "${SNPEFF_GENOME}" \
-            "${input_dir}/${sample}.vcf.gz" > "${out_path}"
+            "${infile_dir}/${sample}.vcf.gz" > "${out_path}"
         bgzip -@ ${THREADS} ${out_path}
         bcftools index --threads ${THREADS} ${out_path}.gz
     }
@@ -785,21 +785,65 @@ Both ``VEP`` and ``snpEff`` annotations are now available. These are recombined 
         local sample=$1
         local annot_eff="${RESULTS_DIR}/08_annot_eff/"
         local annot_vep="${RESULTS_DIR}/08_annot_vep/"
-        local output_dir="${RESULTS_DIR}/08_annot_all/"
+        local outfile_dir="${RESULTS_DIR}/08_annot_all/"
 
         bcftools merge --threads ${THREADS} \
             --force-samples \
             ${annot_vep}/${sample}.vcf.gz \
             ${annot_eff}/${sample}.vcf.gz \
-            --write-index -Ob -o ${output_dir}/${sample}.vcf.gz
+            --write-index -Ob -o ${outfile_dir}/${sample}.vcf.gz
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do 
         annot_all $sample
     done
 
-Filter by SNP impact
-++++++++++++++++++++
+Visualising data
+++++++++++++++++
 
-Remaining steps are associated with parsing the vcf into a human-readable format for visualisation.
+Preparing data for visualisation
+********************************
+
+The aim is to visualise the tracks containing all reads at each SNP position. Visualising the entire genome is ideal but the size of the alignment data makes this step impractical. Therefore, we subset the ``bam`` alignment files [-500,500] around each SNP for a portable but still informative ``bam`` file. The full ``bam`` file can also be loaded and mounted on a separate volume if needed.
+
+In this step, we subset the ``bam`` files for portability.
+
+.. code-block:: shell
+
+    subset_bam() {
+        local sample=$1
+        local infile_dir="${RESULTS_DIR}/08_annot_all/"
+        local outfile_dir="${RESULTS_DIR}/10_visualisations/"
+
+        python parse_vcf.py \
+            ${infile_dir}/${sample}.vcf.gz \
+            ${SAMPLESHEET} \
+            ${outfile_dir}/${sample}.csv
+    }
+    
+    for sample in "${MUT_SAMPLES[@]}"; do 
+        subset_bam $sample
+    done
+
+Here we parse the final ``vcf`` files into a format suitable for visualisation.
+
+.. code-block:: shell
+
+    prep_vis() {
+        local sample=$1
+        local infile_dir="${RESULTS_DIR}/08_annot_all/"
+        local outfile_dir="${RESULTS_DIR}/10_visualisations/"
+
+        python parse_vcf.py \
+            ${infile_dir}/${sample}.vcf.gz \
+            ${SAMPLESHEET} \
+            ${outfile_dir}/${sample}.csv
+    }
+    
+    for sample in "${MUT_SAMPLES[@]}"; do 
+        prep_vis $sample
+    done
+
+
+
 
