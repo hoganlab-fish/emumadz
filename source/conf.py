@@ -6,10 +6,10 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'Zebrafish Enhanced Bioinformatics Resource Analysis For Identifying Spontaneous Hypermutation - Enhanced Nuclear Ultraviolet - Single Nucleotide Identification Pipeline for Experimental Research'
-copyright = '2025, Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Jason Li, Benjamin Hogan'
-author = 'Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Jason Li, Benjamin Hogan'
-release = '0.0.1'
+project = 'EMUMADZ: Enhanced MUtation MApping and Detection in Zebrafish'
+copyright = '2025, Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Scott Paterson, Oguzhan Baltaci, Cas Simons, Jason Li, Benjamin Hogan'
+author = 'Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Scott Paterson, Oguzhan Baltaci, Cas Simons, Jason Li, Benjamin Hogan'
+release = '0.1.1'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
