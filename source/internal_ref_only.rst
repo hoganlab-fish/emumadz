@@ -1,5 +1,8 @@
-Quickstart
-==========
+Internal reference only
+=======================
+
+.. important::
+    This contains information about an earlier iteration of the pipeline and is only relevant if you want to compare previous in-house steps to current protocols. If you are a new user of the pipeline and see this page, you can probably ignore the information here.
 
 .. whole_genome_sequencing documentation master file, created by
    sphinx-quickstart on Mon Jun 30 12:23:50 2025.
@@ -22,6 +25,128 @@ Code in this repository is provided under a `MIT license`_. This documentation i
 
 .. _ben.hogan@petermac.org: mailto:ben.hogan@petermac.org
 
+Changelog
+---------
+- Uses updated versions of ``gatk``, ``bcftools``, ``snpEff``, ``VEP`` to replace obsolete functionality.
+- Uses ``csi`` instead of ``tbi`` indexing for stability with long chromosomes.
+- Reworked logic of the original pipeline to handle missing values.
+- Increased threshold for read mapping quality which was causing false negatives.
+- Lowered threshold for homozygous calls to handle leakage which was causing false negatives.
+- All-in-one pipeline which can handle any combination of mutant and control data.
+- Now handles mulitallelic SNPs correctly (i.e. if a reference has a SNP but this SNP is different to the mutant, it is correctly identified as a SNP event in the mutant.)
+- Concept of candidate strictness is removed and replaced with allele frequencies with user-defined filters.
+- Variant impact prediction now uses two independent annotation prediction software.
+- Modern visualisation methods independent of ``IGV`` genome browser.
+
+Important information
+---------------------
+
+.. warning::
+   Parts of the pipeline silently truncate file names. To fix this, original filenames were shortened. A map to the original file names were preserved.
+
+Experimental design
++++++++++++++++++++
+
+We have 4 ``FO`` fish. These are mutagenised in a ENU forward genetics screen. The germline mutants are obtained and propagated until the ``F2`` generation. The aim is to find SNPs in the ``F2`` generation that are not present in the ``F0`` generation.
+
+.. note::
+   These are functionally germline mutants.
+
+To filter out variants present in the Zebrafish reference genome, variant calling is performed against a reference in all cases.
+- Variants in ``F0`` are called against the ``Zebrafish Zv9 danRer7`` reference genome. 
+- Variants in ``F2`` are called against the ``Zebrafish Zv9 danRer7`` reference genome. 
+
+
+``VCF`` 
++++++++
+
+The original variant caller did not pool the reference files. 
+
+``BAM``
++++++++
+
+Alignment ``bam`` files provide the most direct ``SNP`` readouts.
+
+
+``SNZL`` and ``FOSHZL`` usage
++++++++++++++++++++++++++++++
+
+Usage tested on ``CentOS7`` only. Works in ``apptainer/singularity`` containers with ``CentOS7``. Note that the software is no longer available on ``pypi``.
+
+``FOSHZL`` is used to create homozygosity plots. These appear as peaks showing regions of interest on genome browsers. Note that these regions are tiled for visualisation purposes (ie not single base pair resolution).
+
+``SNZL`` performs various calculations to determine if a SNP is a good candidate. ``SNZL`` claims to account for the following criteria:
+
+1. The mutant must be covered to a depth of ``>= 1`` read
+2. ``>=`` of the unaffected sibling or other samples must be covered to a depth of ``>= 1`` read
+3. If the mutant and sibling have a single allele, it must not be the same in both
+4. The mutant must have a majority allele that is not the majority allele in any of the 'other' samples
+
+Usage
+-----
+
+Data setup
+++++++++++
+
+Original data (reference only)
+##############################
+
+.. caution::
+   The original data setup was sample-centric as opposed to more conventional process-centric directory structure. In addition, code had hardcoded paths which limited file movement. This impacted all steps of analysis and reduced reproducibility. To lower the impact of the original file layout, the data directory now contains samplesheets with updated file paths to symlinks and their attributes. However, it is possible that some errors remain.
+
+Run ``1.extract_filepaths.sh`` with the required command line arguments to generate the samplesheets with paths to old files. The samplesheets are tab separated files with the following fields:
+
+.. csv-table:: Samplesheet column information
+   :file: tables/samplesheet_fields.csv
+   :header-rows: 1
+
+.. warning::
+   A downstream step silently truncates file names if it exceeds a certain limit. No explanation for this behaviour was available. The ``1.extract_filepaths.sh`` script will try to "guess" file paths by performing an arbitrary truncation and subsequent substring matching.
+
+.. note::
+   ``Vis_`` fields should contain the file name but not the file extensions, both ``bedgraph`` and ``tdf`` files will be generated. Note that both files contain the same information but ``tdf`` is optimised for viewing with the ``IGV`` Genome Browser.
+
+.. csv-table:: Example samplesheet showing one sample
+   :file: tables/samplesheet_example.csv
+   :header-rows: 1
+
+The ``2.validate_samples.py`` script checks the validity of each file in the samplesheet per sample. This also drops the ``fastq`` column. Automatically runs in ``1.extract_filepaths.sh``.
+
+.. code:: shell
+
+   python 2.validate_samples.py ../data/samplesheet.tmp -o ../data/samplesheet.tsv
+
+.. caution::
+   Custom directories and/or files exist since the data passed through multiple iterations. To some extent this is accommodated in the setup and validation scripts, but make sure to double-check everything.
+
+For the purposes of rerunning the postprocessing, we only want the ``bam`` alignment files and original ``vcf`` files, since we will be recreating everything after this step. Running ``3.setup_dataset.sh`` will create the corresponding input and output directories::
+
+   ../data/Alignment_File
+   ../data/VCF_Original
+   ../results/Sample_Identity
+   ../results/Fastq_File
+   ../results/Alignment_File
+   ../results/VCF_Merged
+   ../results/VCF_ChrFixed
+   ../results/VCF_Annotated
+   ../results/VCF_Candidates
+   ../results/Snzl_NoGaps_NBases
+   ../results/Snzl_NoGaps_NSnps
+   ../results/Snzl_WithGaps_NBases
+   ../results/Snzl_WithGaps_NSnps
+   ../results/Json
+   
+While the ``bam`` and ``vcf`` files are not directly included in this repository due to size constraints, ``md5`` sums are preserved in ``data/Alignment_File/bam.md5`` and ``data/VCF_Original/vcf.md5``.
+
+Four samplesheet files are generated:
+- ``samplesheet.220701_A01221_0125_BHCCHNDMXY.tsv``
+- ``samplesheet.220930_A00692_316_AHVMJFDSX3.tsv``
+- ``samplesheet.221014_A00692_0319_BHGJ7CDMXY.tsv``
+- ``samplesheet.231201_A00692_0394_231208_A00692_0396.tsv``
+
+The ``samplesheet.220701_A01221_0125_BHCCHNDMXY.tsv`` contains ``F0`` grandparent reference generation metadata. All other samplesheets contain ``F2`` generation metadata. ``samplesheet_original.tsv`` contains these legacy file paths.
+
+``3.setup_dataset.sh`` copies ``bam`` alignment files and ``vcf`` variant calling files over from their specified locations in ``samplesheet_original.tsv`` to ``data/Alignment_File`` and ``data/VCF_Original`` respectively. We generate ``samplesheet_postprocess.tsv`` for use in this postprocessing analysis.
 
 Usage
 -----

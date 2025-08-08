@@ -6,7 +6,8 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'EMUMADZ: Enhanced MUtation MApping and Detection in Zebrafish'
+project = 'EMUMADZ'
+# Enhanced MUtation MApping and Detection in Zebrafish
 copyright = '2025, Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Scott Paterson, Oguzhan Baltaci, Cas Simons, Jason Li, Benjamin Hogan'
 author = 'Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Scott Paterson, Oguzhan Baltaci, Cas Simons, Jason Li, Benjamin Hogan'
 release = '0.1.1'

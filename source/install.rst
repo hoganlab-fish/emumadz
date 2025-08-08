@@ -68,7 +68,7 @@ Variant annotators
 VEP
 ###
 
-`For a manual install, you can follow the install instructions on their github`_, or use the ``conda`` / ``docker`` environments provided.
+For a manual install, `you can follow the install instructions on their github`_:, or use the ``conda`` / ``docker`` environments provided.
 
 .. note::
 
@@ -81,7 +81,7 @@ VEP
     apptainer pull --name vep.sif docker://ensemblorg/ensembl-vep
     singularity pull --name vep.sif docker://ensemblorg/ensembl-vep
 
-.. _You can follow the install instructions on their github: https://github.com/Ensembl/ensembl-vep
+.. _you can follow the install instructions on their github: https://github.com/Ensembl/ensembl-vep
 
 Manually install the following libraries if you are running their ``INSTALL.pl`` script:
 

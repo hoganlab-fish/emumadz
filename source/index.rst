@@ -1,8 +1,7 @@
-ZEBRAFISH-ENU-SNIPER
-====================
-Zebrafish Enhanced Bioinformatics Resource Analysis For Identifying Spontaneous Hypermutation - Enhanced Nuclear Ultraviolet - Single Nucleotide Identification Pipeline for Experimental Research
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
+EMUMADZ
+=======
+Enhanced MUtation MApping and Detection in Zebrafish
+----------------------------------------------------
 .. whole_genome_sequencing documentation master file, created by
    sphinx-quickstart on Mon Jun 30 12:23:50 2025.
    You can adapt this file completely to your liking, but it should at least
@@ -34,8 +33,8 @@ Contains the documentation for our custom zebrafish whole genome sequencing pipe
 
    intro
    install
-   quickstart
-   postprocess
+   case_study_1
+   internal_ref_only
 
 
 Indices and tables

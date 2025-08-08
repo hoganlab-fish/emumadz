@@ -32,79 +32,8 @@ Usage
 Data setup
 ++++++++++
 
-Original data (reference only)
-##############################
-
-.. raw:: html
-
-   <details>
-   <summary><a>Original data run preserved for the record.</a></summary>
-
-.. caution::
-   The original data setup was sample-centric as opposed to more conventional process-centric directory structure. In addition, code had hardcoded paths which limited file movement. This impacted all steps of analysis and reduced reproducibility. To lower the impact of the original file layout, the data directory now contains samplesheets with updated file paths to symlinks and their attributes. However, it is possible that some errors remain.
-
-Run ``1.extract_filepaths.sh`` with the required command line arguments to generate the samplesheets with paths to old files. The samplesheets are tab separated files with the following fields:
-
-.. csv-table:: Samplesheet column information
-   :file: tables/samplesheet_fields.csv
-   :header-rows: 1
-
-.. warning::
-   A downstream step silently truncates file names if it exceeds a certain limit. No explanation for this behaviour was available. The ``1.extract_filepaths.sh`` script will try to "guess" file paths by performing an arbitrary truncation and subsequent substring matching.
-
-.. note::
-   ``Vis_`` fields should contain the file name but not the file extensions, both ``bedgraph`` and ``tdf`` files will be generated. Note that both files contain the same information but ``tdf`` is optimised for viewing with the ``IGV`` Genome Browser.
-
-.. csv-table:: Example samplesheet showing one sample
-   :file: tables/samplesheet_example.csv
-   :header-rows: 1
-
-The ``2.validate_samples.py`` script checks the validity of each file in the samplesheet per sample. This also drops the ``fastq`` column. Automatically runs in ``1.extract_filepaths.sh``.
-
-.. code:: shell
-
-   python 2.validate_samples.py ../data/samplesheet.tmp -o ../data/samplesheet.tsv
-
-.. caution::
-   Custom directories and/or files exist since the data passed through multiple iterations. To some extent this is accommodated in the setup and validation scripts, but make sure to double-check everything.
-
-For the purposes of rerunning the postprocessing, we only want the ``bam`` alignment files and original ``vcf`` files, since we will be recreating everything after this step. Running ``3.setup_dataset.sh`` will create the corresponding input and output directories::
-
-   ../data/Alignment_File
-   ../data/VCF_Original
-   ../results/Sample_Identity
-   ../results/Fastq_File
-   ../results/Alignment_File
-   ../results/VCF_Merged
-   ../results/VCF_ChrFixed
-   ../results/VCF_Annotated
-   ../results/VCF_Candidates
-   ../results/Snzl_NoGaps_NBases
-   ../results/Snzl_NoGaps_NSnps
-   ../results/Snzl_WithGaps_NBases
-   ../results/Snzl_WithGaps_NSnps
-   ../results/Json
-   
-While the ``bam`` and ``vcf`` files are not directly included in this repository due to size constraints, ``md5`` sums are preserved in ``data/Alignment_File/bam.md5`` and ``data/VCF_Original/vcf.md5``.
-
-Four samplesheet files are generated:
-- ``samplesheet.220701_A01221_0125_BHCCHNDMXY.tsv``
-- ``samplesheet.220930_A00692_316_AHVMJFDSX3.tsv``
-- ``samplesheet.221014_A00692_0319_BHGJ7CDMXY.tsv``
-- ``samplesheet.231201_A00692_0394_231208_A00692_0396.tsv``
-
-The ``samplesheet.220701_A01221_0125_BHCCHNDMXY.tsv`` contains ``F0`` grandparent reference generation metadata. All other samplesheets contain ``F2`` generation metadata. ``samplesheet_original.tsv`` contains these legacy file paths.
-
-``3.setup_dataset.sh`` copies ``bam`` alignment files and ``vcf`` variant calling files over from their specified locations in ``samplesheet_original.tsv`` to ``data/Alignment_File`` and ``data/VCF_Original`` respectively. We generate ``samplesheet_postprocess.tsv`` for use in this postprocessing analysis.
-
-.. raw:: html
-
-   </details>
-
-Data setup
-++++++++++
-
 Software requirements:
+
 - bcftools
 - gatk
 - samtools
@@ -269,7 +198,7 @@ We filter the ``bam`` files for low quality reads and perform variant calling si
         gatk --java-options "${GATK_JAVA_OPTS}" HaplotypeCaller \
             -R ${REFERENCE_FA} \
             -I ${bam_path} \
-            -O "${RESULTS_DIR}/01_variant_calling/${sample}_raw.vcf.gz" \
+            -O "${RESULTS_DIR}/01_variant_calling/${sample}.vcf.gz" \
             --minimum-mapping-quality 20 \
             --min-base-quality-score 20 \
             --stand-call-conf 30 \
@@ -378,7 +307,7 @@ At the same time, we are only interested in the chromosomes, which start with ``
         # rename all contigs with mapping
         bcftools annotate --threads ${THREADS} \
             --rename-chr ${CHROM_MAP} \
-            ${infile_dir}/${sample}_raw.vcf.gz | \
+            ${infile_dir}/${sample}.vcf.gz | \
         grep -v '##contig=<ID=FR' > "${outfile_dir}/${sample}_reannot.vcf"
         
         # filter to main chromosomes only and remove non-chromosomal variants from header

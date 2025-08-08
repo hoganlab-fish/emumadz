@@ -22,27 +22,17 @@ Highlights
 ----------
 
 We provide a pipeline which:
-1. Performs whole zebrafish genome assembly
-2. Variant calling
-3. Generates homozygosity peaks for visualisation
-4. Predicts the impact of identified SNPs
-5. Identify strict candidate SNPs
-6. Filter out predicted high impact SNPs
-7. Filter out only SNPs (excluding CNV, INDELS, etc)
+*to be written*
+
+Graphical abstract
+------------------
 
 *put a workflow figure here*
 
-Changelog
----------
-- Uses updated versions of ``gatk``, ``bcftools``, ``snpEff`` to replace obsolete functionality.
-- Uses ``csi`` instead of ``tbi`` indexing for stability with long chromosomes.
-- Reworked logic of the original pipeline to handle missing values.
-- Increased threshold for read mapping quality which was causing false negatives.
-- Lowered threshold for homozygous calls to handle leakage which was causing false negatives.
-- All-in-one pipeline which can handle any combination of mutant and control data.
-- Now handles mulitallelic SNPs correctly (i.e. if a reference has a SNP but this SNP is different to the mutant, it is correctly identified as a SNP event in the mutant.)
-- Concept of candidate strictness is removed and replaced with allele frequencies with user-defined filters.
-- Modern visualisation methods independent of ``IGV`` genome browser.
+Abstract
+--------
+
+Forward genetic screening in model organisms remains a powerful tool for identifying unexpected new genes involved in any biological process of interest. While biological and computational protocols for identifying genetic variation are mature, many workflows are designed for human and mouse data. Therefore, we developed a species-agnostic pipeline which compares any combination of mutant and reference samples. We demonstrate the capabilities of our pipeline with a case study using the common laboratory model organism Danio rerio: the zebrafish. A large scale forward genetic screen was performed using the chemical mutagen N-ethyl-N-nitrosourea (ENU) to discover new autosomal recessive mutations in biological processes of interest. To identify candidate causative mutations for screened mutants, a low coverage (~10x) whole genome sequencing (WGS) was performed. To map homozygous mutants to the genome for subsequent identification of candidate mutations, WGS data was generated from mutant animals and control samples. We optimised a pipeline that (a) mapped mutations to a region of genomic linkage and (b) identified candidate SNPs predicted to be damaging to gene function, matching (c) essential criteria of homozygous mutations which are ENU-induced and absent in control reference samples. Other features of our pipeline include modern, interactive visualisations. Future plans include AlphaFold integration as an additional predictor for SNP impact as well as improved scalability with nextflow. Our pipeline is documented with a case study for reference and is hosted in an open-source software repository. The tool has minimal dependencies, with apptainer and conda instances available for usability. 
 
 Cite us with
 ------------
