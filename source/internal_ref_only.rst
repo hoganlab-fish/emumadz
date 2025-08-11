@@ -1,7 +1,5 @@
-Appendix
-========
 Internal reference only
------------------------
+=======================
 
 .. important::
     This contains information about an earlier iteration of the pipeline and is only relevant if you want to compare previous in-house steps to current protocols. If you are a new user of the pipeline and see this page, you can probably ignore the information here.

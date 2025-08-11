@@ -34,8 +34,7 @@ Contains the documentation for our custom zebrafish whole genome sequencing pipe
    intro
    install
    case_study_1
-   internal_ref_only
-
+   appendix_main
 
 Indices and tables
 ==================
