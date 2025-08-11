@@ -1,5 +1,7 @@
-BAM to SNP
-==========
+EMUMADZ pipeline case study 1
+=============================
+BAM to SNP for F0-F2 comparisons
+--------------------------------
 
 .. whole_genome_sequencing documentation master file, created by
    sphinx-quickstart on Mon Jun 30 12:23:50 2025.
@@ -150,7 +152,8 @@ Create some metadata files. The chromosome file maps the chromosome IDs onto the
         fi
 
         # create chromosome list (adjust range as needed)
-        head -n 25 ${REF_FIXED_FA}.fai > ${DATA_DIR}/chromosomes.txt
+        grep -P "^chr[0-9]+\t" ${REF_FIXED_FA}.fai > \
+            ${DATA_DIR}/chromosomes.txt
     }
 
     setup
