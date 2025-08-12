@@ -27,6 +27,9 @@ We thank Richard Lupat and Jason Li from the Bioinformatics Core (RRID: SCR_0259
 
 Contains the documentation for our custom zebrafish whole genome sequencing pipeline.
 
+.. image:: _static/emu.png
+   :alt: emu conducting a symphony of zebrafish with variants
+
 .. toctree::
    :maxdepth: 3
    :caption: Contents:
@@ -34,7 +37,15 @@ Contains the documentation for our custom zebrafish whole genome sequencing pipe
    intro
    install
    case_study_1
-   appendix_main
+
+Appendix
+========
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Appendix:
+   
+   appendix_internal_ref_only
 
 Indices and tables
 ==================
