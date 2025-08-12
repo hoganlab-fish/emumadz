@@ -736,28 +736,10 @@ Visualising data
 Preparing data for visualisation
 ********************************
 
-The aim is to visualise the tracks containing all reads at each SNP position. Visualising the entire genome is ideal but the size of the alignment data makes this step impractical. Therefore, we subset the ``bam`` alignment files [-500,500] around each SNP for a portable but still informative ``bam`` file. The full ``bam`` file can also be loaded and mounted on a separate volume if needed.
+The aim is to visualise the tracks containing all reads at each SNP position. Visualising the entire genome is ideal but the size of the alignment data makes this step impractical. Therefore, we subset the ``bam`` alignment files [-5,5] around each SNP for a portable but still informative ``bam`` file. The full ``bam`` file can also be loaded and mounted on a separate volume if needed.Here we parse the final ``vcf`` files into a format suitable for visualisation.
 
-In this step, we subset the ``bam`` files for portability.
-
-.. code-block:: shell
-
-    subset_bam() {
-        local sample=$1
-        local infile_dir="${RESULTS_DIR}/08_annot_all/"
-        local outfile_dir="${RESULTS_DIR}/10_visualisations/"
-
-        python parse_vcf.py \
-            ${infile_dir}/${sample}.vcf.gz \
-            ${SAMPLESHEET} \
-            ${outfile_dir}/${sample}.csv
-    }
-    
-    for sample in "${MUT_SAMPLES[@]}"; do 
-        subset_bam $sample
-    done
-
-Here we parse the final ``vcf`` files into a format suitable for visualisation.
+.. hint::
+    Skipping ``bam`` file subsetting and inspecting the full file is also valid. However, portability is an on-going issue due to ``bam`` file size (in this case ~10-20GB each).
 
 .. code-block:: shell
 
@@ -770,10 +752,12 @@ Here we parse the final ``vcf`` files into a format suitable for visualisation.
             "${infile_dir}/${sample}.vcf.gz" \
             "${SAMPLESHEET}" \
             "${outfile_dir}/${sample}.csv" \
-            --subset_path "${outfile_dir}/${sample}.bam" \
+            --subset_path "${outfile_dir}/${sample}" \
             --subset_workers ${THREADS} \
+            --subset_padding 5 \
             --coverage_report "${outfile_dir}/${sample}_coverage.csv" \
-            --chrom_mapping ${CHROM_MAP}
+            --chrom_mapping ${CHROM_MAP} \
+            --force_overwrite
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do 
