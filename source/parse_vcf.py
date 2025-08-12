@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# loads a vcf with annotations, parses into a table, subset and rename alignments if needed
 import argparse
 import json
 import os
@@ -6,24 +7,62 @@ import pandas as pd
 import pysam
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
+from typing import List, Dict, Tuple, Optional, Union
 
 class VCFParser:
-    def __init__(self, vcf_file, samplesheet_file, chrom_mapping_file=None):
+    def __init__(
+            self, 
+            vcf_file: str, 
+            samplesheet_file: str, 
+            chrom_mapping_file: Optional[str] = None
+            ):
+        """Parse annotated VCF files and create BAM subsets for variant analysis.
+        
+        This class processes VCF files with VEP/SnpEff annotations, matches samples 
+        to BAM files, and optionally creates chromosome-renamed BAM subsets around 
+        variant positions for visualization.
+        
+        :param vcf_file: Path to annotated VCF file
+        :type vcf_file: str
+        :param samplesheet_file: Tab-separated file mapping sample IDs to BAM paths and types
+        :type samplesheet_file: str
+        :param chrom_mapping_file: Optional TSV file mapping old to new chromosome names
+        :type chrom_mapping_file: Optional[str]
+        
+        Example:
+            >>> parser = VCFParser('variants.vcf', 'samples.tsv', 'chr_mapping.tsv')
+            >>> df = parser.process_vcf('output.csv', subset_path='bam_subsets/')
+        """
         self.vcf_file = vcf_file
         self.samplesheet = pd.read_csv(samplesheet_file, sep='\t')
         self.sample_info = dict(zip(self.samplesheet['sample_id'], 
-                                  zip(self.samplesheet['bam_path'], 
-                                      self.samplesheet['sample_type'])))
+                                zip(self.samplesheet['bam_path'], 
+                                    self.samplesheet['sample_type'])))
         
         self.chrom_mapping = None
         if chrom_mapping_file:
-            mapping_df = pd.read_csv(chrom_mapping_file, sep='\t', header=None, 
-                                   names=['bam_chrom', 'renamed_chrom'])
-            self.chrom_mapping = dict(zip(mapping_df['bam_chrom'], mapping_df['renamed_chrom']))
+            mapping_data = pd.read_csv(
+                chrom_mapping_file, sep='\t', header=None, 
+                names=['bam_chrom', 'renamed_chrom']
+                )
+            self.chrom_mapping = dict(zip(
+                mapping_data['bam_chrom'], mapping_data['renamed_chrom']
+                ))
+        
+        # Get reference samples for shared processing
+        self.reference_samples = {
+            sample_id: bam_path for sample_id, (bam_path, sample_type) 
+            in self.sample_info.items() if sample_type.lower() in ['control', 'reference']
+            }
     
-    def parse_csq_field(self, csq_string):
-        """Parse VEP CSQ field"""
+    def parse_csq_field(self, csq_string: str) -> List[Dict[str, str]]:
+        """Parse VEP CSQ field.
+        
+        :param csq_string: VEP CSQ annotation string
+        :type csq_string: str
+        :returns: List of parsed annotation dictionaries
+        :rtype: List[Dict[str, str]]
+        """
         if not csq_string:
             return []
         
@@ -42,8 +81,14 @@ class VCFParser:
                 })
         return annotations
     
-    def parse_ann_field(self, ann_string):
-        """Parse SnpEff ANN field"""
+    def parse_ann_field(self, ann_string: str) -> List[Dict[str, str]]:
+        """Parse SnpEff ANN field.
+        
+        :param ann_string: SnpEff ANN annotation string
+        :type ann_string: str
+        :returns: List of parsed annotation dictionaries
+        :rtype: List[Dict[str, str]]
+        """
         if not ann_string:
             return []
         
@@ -61,8 +106,14 @@ class VCFParser:
                 })
         return annotations
     
-    def calculate_allele_freq(self, genotype):
-        """Calculate allele frequency from genotype"""
+    def calculate_allele_freq(self, genotype: str) -> Tuple[Optional[float], Optional[str]]:
+        """Calculate allele frequency from genotype.
+        
+        :param genotype: Genotype string (e.g., "0/1", "1/1")
+        :type genotype: str
+        :returns: Tuple of (frequency_float, count_string)
+        :rtype: Tuple[Optional[float], Optional[str]]
+        """
         if not genotype or genotype == './.':
             return None, None
         
@@ -76,8 +127,14 @@ class VCFParser:
         
         return alt_count / total, f"{alt_count}/{total}"
     
-    def get_impact_color(self, impact):
-        """Get color coding for impact"""
+    def get_impact_color(self, impact: str) -> str:
+        """Get color coding for impact level.
+        
+        :param impact: Impact level string (HIGH, MODERATE, LOW, MODIFIER)
+        :type impact: str
+        :returns: Hex color code
+        :rtype: str
+        """
         colors = {
             'HIGH': '#FF0000',
             'MODERATE': '#FF8C00', 
@@ -86,8 +143,14 @@ class VCFParser:
         }
         return colors.get(impact.upper(), '#CCCCCC')
     
-    def match_sample(self, vcf_sample):
-        """Match VCF sample to samplesheet entry"""
+    def match_sample(self, vcf_sample: str) -> Tuple[Optional[str], Optional[str]]:
+        """Match VCF sample to samplesheet entry.
+        
+        :param vcf_sample: Sample name from VCF
+        :type vcf_sample: str
+        :returns: Tuple of (bam_path, sample_type)
+        :rtype: Tuple[Optional[str], Optional[str]]
+        """
         # Exact match first
         if vcf_sample in self.sample_info:
             return self.sample_info[vcf_sample]
@@ -99,12 +162,67 @@ class VCFParser:
         
         return None, None
     
-    def create_bam_subset(self, bam_path, variant_positions, output_path, padding=50):
-        """Create subset BAM containing reads around variant positions"""
+    def create_reference_bam_subsets(
+            self, 
+            subset_path: str, 
+            variant_positions: List[Tuple[str, int]], 
+            padding: int = 5
+            ) -> Dict[str, str]:
+        """Create chromosome-renamed reference BAM subsets for all reference samples.
+        
+        :param subset_path: Output directory for subset BAMs
+        :type subset_path: str
+        :param variant_positions: List of (chromosome, position) tuples
+        :type variant_positions: List[Tuple[str, int]]
+        :param padding: Base pairs around variants
+        :type padding: int
+        :returns: Dictionary mapping sample_id to output BAM path
+        :rtype: Dict[str, str]
+        """
+        reference_bam_paths = {}
+        
+        for ref_sample_id, ref_bam_path in self.reference_samples.items():
+            if not os.path.exists(ref_bam_path):
+                continue
+                
+            output_path = os.path.join(subset_path, f"{ref_sample_id}_reference.bam")
+            
+            # Skip if already exists
+            if os.path.exists(output_path):
+                reference_bam_paths[ref_sample_id] = f"{ref_sample_id}_reference.bam"
+                continue
+                
+            success = self.create_bam_subset(ref_bam_path, variant_positions, output_path, padding)
+            if success:
+                reference_bam_paths[ref_sample_id] = f"{ref_sample_id}_reference.bam"
+        
+        return reference_bam_paths
+    
+    def create_bam_subset(
+            self, 
+            bam_path: str, 
+            variant_positions: List[Tuple[str, int]], 
+            output_path: str, 
+            padding: int = 5
+            ) -> bool:
+        """Create subset BAM containing reads around variant positions.
+        
+        :param bam_path: Path to source BAM file
+        :type bam_path: str
+        :param variant_positions: List of (chromosome, position) tuples
+        :type variant_positions: List[Tuple[str, int]]
+        :param output_path: Output BAM file path
+        :type output_path: str
+        :param padding: Base pairs around variants
+        :type padding: int
+        :returns: Success status
+        :rtype: bool
+        """
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         # Index BAM if needed
-        if not os.path.exists(bam_path + ".bai"):
+        if not os.path.exists(bam_path + ".bai") or \
+            not os.path.exists(bam_path.replace(".bam", ".bai")):
             pysam.index(bam_path)
         
         with pysam.AlignmentFile(bam_path, "rb") as inbam:
@@ -116,7 +234,11 @@ class VCFParser:
                     if old_name in self.chrom_mapping:
                         sq['SN'] = self.chrom_mapping[old_name]
             
-            with pysam.AlignmentFile(output_path, "wb", header=pysam.AlignmentHeader.from_dict(header)) as outbam:
+            with pysam.AlignmentFile(
+                    output_path, 
+                    "wb", 
+                    header=pysam.AlignmentHeader.from_dict(header)
+                ) as outbam:
                 processed_regions = set()
                 
                 for chrom, pos in variant_positions:
@@ -165,8 +287,23 @@ class VCFParser:
         
         return True
     
-    def process_sample_variants(self, sample_data, padding=50, force_overwrite=False):
-        """Process all variants for a single sample and create subset BAM"""
+    def process_sample_variants(
+            self, 
+            sample_data: Dict[str, Union[str, pd.DataFrame]], 
+            padding: int = 5, 
+            force_overwrite: bool = False
+        ) -> bool:
+        """Process all variants for a single sample and create subset BAM.
+        
+        :param sample_data: Dictionary containing sample info and variants
+        :type sample_data: Dict[str, Union[str, pd.DataFrame]]
+        :param padding: Base pairs around variants
+        :type padding: int
+        :param force_overwrite: Whether to overwrite existing files
+        :type force_overwrite: bool
+        :returns: Success status
+        :rtype: bool
+        """
         sample_id = sample_data['sample_id']
         bam_path = sample_data['bam_path']
         output_path = sample_data['output_path']
@@ -178,124 +315,27 @@ class VCFParser:
         if not os.path.exists(bam_path):
             return False
         
-        variant_positions = [(row['chromosome'], row['position']) for _, row in variants.iterrows()]
-        return self.create_bam_subset(bam_path, variant_positions, output_path, padding)
+        variant_positions = [
+            (row['chromosome'], row['position']) for _, row in variants.iterrows()
+        ]
+        return self.create_bam_subset(
+            bam_path, variant_positions, output_path, padding
+        )
     
-    def process_vcf(self, output_file, subset_path=None, subset_padding=50, max_workers=4, force_overwrite=False, coverage_report=None):
-        """Process VCF and create analysis table"""
-        vcf_reader = pysam.VariantFile(self.vcf_file)
-        variants = []
+    def validate_bam_subset(
+            self, 
+            subset_path: str, 
+            expected_variants: List[Tuple[str, int]]
+        ) -> Tuple[bool, Union[str, Dict]]:
+        """Validate that a BAM subset contains reads covering expected variant positions.
         
-        for record in vcf_reader:
-            variant_id = f"{record.chrom}:{record.pos}:{record.ref}:{','.join([str(alt) for alt in record.alts])}"
-            
-            # Parse annotations
-            vep_annotations = []
-            if 'CSQ' in record.info:
-                csq_data = record.info['CSQ'][0] if isinstance(record.info['CSQ'], tuple) else record.info['CSQ']
-                vep_annotations = self.parse_csq_field(csq_data)
-            
-            snpeff_annotations = []
-            if 'ANN' in record.info:
-                ann_data = record.info['ANN'][0] if isinstance(record.info['ANN'], tuple) else record.info['ANN']
-                snpeff_annotations = self.parse_ann_field(ann_data)
-            
-            # Find mutant and reference samples
-            mutant_sample = None
-            reference_samples = []
-            
-            for sample_name in record.samples:
-                bam_path, sample_type = self.match_sample(sample_name)
-                if not bam_path:
-                    continue
-                
-                if sample_type.lower() == 'mutant' and mutant_sample is None:
-                    mutant_sample = (sample_name, bam_path, sample_type)
-                elif sample_type.lower() in ['control', 'reference']:
-                    reference_samples.append((sample_name, bam_path, sample_type))
-            
-            if not mutant_sample:
-                continue
-            
-            # Process mutant sample
-            sample_name, bam_path, sample_type = mutant_sample
-            sample = record.samples[sample_name]
-            
-            # Get genotype info
-            gt = sample.get('GT', (None, None))
-            dp = sample.get('DP', 0)
-            gq = sample.get('GQ', 0)
-            
-            gt_str = '/'.join([str(g) if g is not None else '.' for g in gt]) if gt else './.'
-            af_freq, af_count = self.calculate_allele_freq(gt_str)
-            
-            # Get top consequences
-            vep_top = vep_annotations[0] if vep_annotations else {}
-            snpeff_top = snpeff_annotations[0] if snpeff_annotations else {}
-            
-            # Create reference BAM paths
-            reference_bam_paths = []
-            if subset_path and reference_samples:
-                reference_bam_paths = [f"{ref_name}_reference.bam" for ref_name, _, _ in reference_samples]
-            
-            variant_data = {
-                'variant_id': variant_id,
-                'chromosome': record.chrom,
-                'position': record.pos,
-                'ref': record.ref,
-                'alt': ','.join([str(alt) for alt in record.alts]),
-                'sample_id': sample_name,
-                'sample_type': sample_type,
-                'bam_path': bam_path,
-                'mutant_bam_subset_path': f"{sample_name}_mutant.bam" if subset_path else "",
-                'reference_bam_paths': '|'.join(reference_bam_paths),
-                'genotype': gt_str,
-                'depth': dp or 0,
-                'quality': gq or 0,
-                'allele_freq': af_freq,
-                'allele_count': af_count,
-                'vep_consequence': vep_top.get('consequence', ''),
-                'vep_impact': vep_top.get('impact', ''),
-                'vep_gene': vep_top.get('symbol', ''),
-                'vep_protein_change': vep_top.get('amino_acids', ''),
-                'snpeff_effect': snpeff_top.get('effect', ''),
-                'snpeff_impact': snpeff_top.get('impact', ''),
-                'snpeff_gene': snpeff_top.get('gene', ''),
-                'snpeff_protein_change': snpeff_top.get('amino_acids', ''),
-                'vep_full_annotations': json.dumps(vep_annotations) if vep_annotations else '',
-                'snpeff_full_annotations': json.dumps(snpeff_annotations) if snpeff_annotations else '',
-                'custom_notes': '',
-                'vep_impact_color': self.get_impact_color(vep_top.get('impact', '')),
-                'snpeff_impact_color': self.get_impact_color(snpeff_top.get('impact', ''))
-            }
-            
-            variants.append(variant_data)
-        
-        # Create DataFrame and save
-        df = pd.DataFrame(variants)
-        df.to_csv(output_file, index=False)
-        
-        # Save JSON
-        json_output = output_file.replace('.csv', '.json')
-        df.to_json(json_output, orient='records', indent=2)
-        
-        # Create BAM subsets if requested
-        if subset_path and len(df) > 0:
-            self._create_bam_subsets(df, subset_path, subset_padding, max_workers, force_overwrite)
-            
-            # Generate coverage report if requested
-            if coverage_report:
-                report_df = self.generate_coverage_report(df, subset_path)
-                report_df.to_csv(coverage_report, index=False)
-                print(f"Coverage report saved to {coverage_report}")
-                print(f"Regions processed: {len(report_df)}")
-                print(f"Successful subsets: {report_df['subset_exists'].sum()}")
-                print(f"Average coverage rate: {report_df['coverage_rate'].mean():.2%}")
-        
-        return df
-    
-    def validate_bam_subset(self, subset_path, expected_variants):
-        """Validate that a BAM subset contains reads covering expected variant positions"""
+        :param subset_path: Path to subset BAM file
+        :type subset_path: str
+        :param expected_variants: List of (chromosome, position) tuples
+        :type expected_variants: List[Tuple[str, int]]
+        :returns: Tuple of (success_bool, result_dict)
+        :rtype: Tuple[bool, Union[str, Dict]]
+        """
         if not os.path.exists(subset_path):
             return False, "Subset BAM file not found"
         
@@ -320,12 +360,22 @@ class VCFParser:
                 'coverage_detail': coverage_info
             }
     
-    def generate_coverage_report(self, df, subset_dir):
-        """Generate coverage report for all BAM subsets"""
+    def generate_coverage_report(
+            self, data: pd.DataFrame, subset_dir: str
+        ) -> pd.DataFrame:
+        """Generate coverage report for all BAM subsets.
+        
+        :param data: DataFrame with variant data
+        :type data: pd.DataFrame
+        :param subset_dir: Directory containing subset BAMs
+        :type subset_dir: str
+        :returns: Coverage report DataFrame
+        :rtype: pd.DataFrame
+        """
         report = []
         
         # Group by mutant sample only
-        mutant_variants = df[df['sample_type'].str.lower() == 'mutant']
+        mutant_variants = data[data['sample_type'].str.lower() == 'mutant']
         
         for _, row in mutant_variants.iterrows():
             variant_positions = [(row['chromosome'], row['position'])]
@@ -390,37 +440,189 @@ class VCFParser:
                             'coverage_rate': 0,
                             'total_reads': 0
                         })
-        
         return pd.DataFrame(report)
 
-    def _create_bam_subsets(self, df, subset_path, subset_padding, max_workers, force_overwrite):
-        """Create BAM subsets for all samples"""
+    def process_vcf(
+            self,
+            output_file: str,
+            subset_path: Optional[str] = None, 
+            subset_padding: int = 5, 
+            max_workers: int = 4, 
+            force_overwrite: bool = False, 
+            coverage_report: Optional[str] = None
+        ) -> pd.DataFrame:
+        """Process VCF and create analysis table.
+        
+        :param output_file: Output CSV file path
+        :type output_file: str
+        :param subset_path: Directory for subset BAM files
+        :type subset_path: Optional[str]
+        :param subset_padding: Base pairs around variants for BAM subsets
+        :type subset_padding: int
+        :param max_workers: Number of parallel workers for BAM subsetting
+        :type max_workers: int
+        :param force_overwrite: Whether to overwrite existing files
+        :type force_overwrite: bool
+        :param coverage_report: Path for coverage report CSV
+        :type coverage_report: Optional[str]
+        :returns: DataFrame with processed variants
+        :rtype: pd.DataFrame
+        """
+        vcf_reader = pysam.VariantFile(self.vcf_file)
+        variants = []
+        
+        for record in vcf_reader:
+            variant_id = f"{record.chrom}:{record.pos}:{record.ref}:{','.join([str(alt) for alt in record.alts])}"
+            
+            # Parse annotations
+            vep_annotations = []
+            if 'CSQ' in record.info:
+                csq_data = record.info['CSQ'][0] if isinstance(record.info['CSQ'], tuple) else record.info['CSQ']
+                vep_annotations = self.parse_csq_field(csq_data)
+            
+            snpeff_annotations = []
+            if 'ANN' in record.info:
+                ann_data = record.info['ANN'][0] if isinstance(record.info['ANN'], tuple) else record.info['ANN']
+                snpeff_annotations = self.parse_ann_field(ann_data)
+            
+            # Find mutant and reference samples
+            mutant_sample = None
+            reference_samples = []
+            
+            for sample_name in record.samples:
+                bam_path, sample_type = self.match_sample(sample_name)
+                if not bam_path:
+                    continue
+                
+                if sample_type.lower() == 'mutant' and mutant_sample is None:
+                    mutant_sample = (sample_name, bam_path, sample_type)
+                elif sample_type.lower() in ['control', 'reference']:
+                    reference_samples.append((sample_name, bam_path, sample_type))
+            
+            if not mutant_sample:
+                continue
+            
+            # Process mutant sample
+            sample_name, bam_path, sample_type = mutant_sample
+            sample = record.samples[sample_name]
+            
+            # Get genotype info
+            gt = sample.get('GT', (None, None))
+            dp = sample.get('DP', 0)
+            gq = sample.get('GQ', 0)
+            
+            gt_str = '/'.join([str(g) if g is not None else '.' for g in gt]) if gt else './.'
+            af_freq, af_count = self.calculate_allele_freq(gt_str)
+            
+            # Get top consequences
+            vep_top = vep_annotations[0] if vep_annotations else {}
+            snpeff_top = snpeff_annotations[0] if snpeff_annotations else {}
+            
+            # Create reference BAM paths list - process once for all variants
+            reference_bam_paths = []
+            if subset_path and reference_samples:
+                # Create shared reference BAMs if chromosome mapping exists
+                if self.chrom_mapping:
+                    ref_bam_dict = self.create_reference_bam_subsets(
+                        subset_path, [(record.chrom, record.pos)], subset_padding
+                    )
+                    reference_bam_paths = [
+                        f"{ref_id}_reference.bam" for ref_id in ref_bam_dict.keys()
+                    ]
+                else:
+                    reference_bam_paths = [
+                        f"{ref_name}_reference.bam" for ref_name, _, _ in reference_samples
+                    ]
+            
+            # Get full annotations as JSON strings
+            vep_full = json.dumps(vep_annotations) if vep_annotations else ''
+            snpeff_full = json.dumps(snpeff_annotations) if snpeff_annotations else ''
+            
+            variant_data = {
+                'variant_id': variant_id,
+                'chromosome': record.chrom,
+                'position': record.pos,
+                'ref': record.ref,
+                'alt': ','.join([str(alt) for alt in record.alts]),
+                'sample_id': sample_name,
+                'sample_type': sample_type,
+                'bam_path': bam_path,
+                'mutant_bam_subset_path': f"{sample_name}_mutant.bam" if subset_path else "",
+                'reference_bam_paths': '|'.join(reference_bam_paths),
+                'genotype': gt_str,
+                'depth': dp or 0,
+                'quality': gq or 0,
+                'allele_freq': af_freq,
+                'allele_count': af_count,
+                'vep_consequence': vep_top.get('consequence', ''),
+                'vep_impact': vep_top.get('impact', ''),
+                'vep_gene': vep_top.get('symbol', ''),
+                'vep_protein_change': vep_top.get('amino_acids', ''),
+                'snpeff_effect': snpeff_top.get('effect', ''),
+                'snpeff_impact': snpeff_top.get('impact', ''),
+                'snpeff_gene': snpeff_top.get('gene', ''),
+                'snpeff_protein_change': snpeff_top.get('amino_acids', ''),
+                'vep_full_annotations': vep_full,
+                'snpeff_full_annotations': snpeff_full,
+                'custom_notes': '',
+                'vep_impact_color': self.get_impact_color(vep_top.get('impact', '')),
+                'snpeff_impact_color': self.get_impact_color(snpeff_top.get('impact', ''))
+            }
+            
+            variants.append(variant_data)
+        
+        # Create DataFrame and save
+        data = pd.DataFrame(variants)
+        data.to_csv(output_file, index=False)
+        
+        # Save JSON
+        json_output = output_file.replace('.csv', '.json')
+        data.to_json(json_output, orient='records', indent=2)
+        
+        # Create BAM subsets if requested
+        if subset_path and len(data) > 0:
+            # Create shared reference BAMs first if chromosome mapping is provided
+            if self.chrom_mapping and self.reference_samples:
+                all_variants = [(row['chromosome'], row['position']) for _, row in data.iterrows()]
+                self.create_reference_bam_subsets(subset_path, all_variants, subset_padding)
+            
+            self._create_bam_subsets(data, subset_path, subset_padding, max_workers, force_overwrite)
+            
+            # Generate coverage report if requested
+            if coverage_report:
+                report_data = self.generate_coverage_report(data, subset_path)
+                report_data.to_csv(coverage_report, index=False)
+                print(f"Coverage report saved to {coverage_report}")
+                print(f"Regions processed: {len(report_data)}")
+                print(f"Successful subsets: {report_data['subset_exists'].sum()}")
+                print(f"Average coverage rate: {report_data['coverage_rate'].mean():.2%}")
+        
+        return data
+    
+    def _create_bam_subsets(self, data: pd.DataFrame, subset_path: str, subset_padding: int, max_workers: int, force_overwrite: bool) -> None:
+        """Create BAM subsets for mutant samples only (references handled separately).
+        
+        :param data: DataFrame with variant data
+        :type data: pd.DataFrame
+        :param subset_path: Output directory path
+        :type subset_path: str
+        :param subset_padding: Base pairs padding around variants
+        :type subset_padding: int
+        :param max_workers: Number of parallel workers
+        :type max_workers: int
+        :param force_overwrite: Whether to overwrite existing files
+        :type force_overwrite: bool
+        """
         sample_data_list = []
         
-        for _, row in df.iterrows():
-            # Add mutant sample
+        for _, row in data.iterrows():
+            # Add only mutant samples
             sample_data_list.append({
                 'sample_id': row['sample_id'],
                 'bam_path': row['bam_path'],
                 'output_path': os.path.join(subset_path, f"{row['sample_id']}_mutant.bam"),
                 'variants': pd.DataFrame([row])
             })
-            
-            # Add reference samples
-            if row['reference_bam_paths']:
-                ref_paths = row['reference_bam_paths'].split('|')
-                for ref_path in ref_paths:
-                    if not ref_path:
-                        continue
-                    ref_sample_id = ref_path.replace('_reference.bam', '')
-                    if ref_sample_id in self.sample_info:
-                        ref_bam_path = self.sample_info[ref_sample_id][0]
-                        sample_data_list.append({
-                            'sample_id': ref_sample_id,
-                            'bam_path': ref_bam_path,
-                            'output_path': os.path.join(subset_path, ref_path),
-                            'variants': pd.DataFrame([row])
-                        })
         
         # Remove duplicates and merge variants
         seen_samples = set()
@@ -440,7 +642,12 @@ class VCFParser:
         success_count = 0
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_sample = {
-                executor.submit(self.process_sample_variants, sample_data, subset_padding, force_overwrite): sample_data['sample_id']
+                executor.submit(
+                    self.process_sample_variants, 
+                    sample_data, 
+                    subset_padding, 
+                    force_overwrite
+                    ): sample_data['sample_id']
                 for sample_data in unique_sample_data
             }
             
@@ -451,23 +658,34 @@ class VCFParser:
         print(f"BAM subsets created for {success_count} samples")
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Parse annotated VCF for variant analysis with optional BAM subsetting')
-    parser.add_argument('vcf', help='Merged VCF file with VEP and SnpEff annotations')
-    parser.add_argument('samplesheet', help='Sample metadata file')
-    parser.add_argument('outfile_path', help='Output CSV file')
-    parser.add_argument('--subset_path', default=None, help='Directory path for subset BAM files')
-    parser.add_argument('--subset_padding', type=int, default=10, help='Base pairs around variants for BAM subsets')
-    parser.add_argument('--subset_workers', type=int, default=4, help='Number of parallel workers for BAM subsetting')
-    parser.add_argument('--chrom_mapping', default=None, help='Two-column TSV mapping BAM chromosome names')
-    parser.add_argument('--coverage_report', default=None, help='Generate coverage report CSV file')
-    parser.add_argument('--force_overwrite', action='store_true', help='Overwrite existing subset BAM files')
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description='Parse annotated VCF into tables with optional BAM subsetting'
+        )
+    parser.add_argument('vcf', type=str,
+                        help='Merged VCF file with VEP and SnpEff annotations')
+    parser.add_argument('samplesheet', type=str,
+                        help='Sample metadata file')
+    parser.add_argument('outfile_path', type=str,
+                        help='Output CSV file')
+    parser.add_argument('--subset_path', type=str, default=None, 
+                        help='Directory path for subset BAM files')
+    parser.add_argument('--subset_padding', type=int, default=5, 
+                        help='Base pairs (-/+) around variants for BAM subsets')
+    parser.add_argument('--subset_workers', type=int, default=4, 
+                        help='Number of parallel workers for BAM subsetting')
+    parser.add_argument('--chrom_mapping', type=str, default=None, 
+                        help='Two-column TSV mapping BAM chromosome names')
+    parser.add_argument('--coverage_report', type=str, default=None, 
+                        help='Generate coverage report CSV file')
+    parser.add_argument('--force_overwrite', action='store_true', 
+                        help='Overwrite existing subset BAM files')
     
     args = parser.parse_args()
     
     # Create parser and process VCF
-    parser = VCFParser(args.vcf, args.samplesheet, args.chrom_mapping)
-    df = parser.process_vcf(
+    vcf_parser = VCFParser(args.vcf, args.samplesheet, args.chrom_mapping)
+    data = vcf_parser.process_vcf(
         args.outfile_path,
         subset_path=args.subset_path,
         subset_padding=args.subset_padding,
@@ -476,7 +694,7 @@ def main():
         coverage_report=args.coverage_report
     )
     
-    print(f"Processed {len(df)} mutant variant entries")
+    print(f"Processed {len(data)} mutant variant entries")
     print(f"Results saved to {args.outfile_path}")
 
 if __name__ == "__main__":
