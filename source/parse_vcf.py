@@ -204,7 +204,7 @@ class VCFParser:
             variant_positions: List[Tuple[str, int]], 
             output_path: str, 
             padding: int = 5
-            ) -> bool:
+        ) -> bool:
         """Create subset BAM containing reads around variant positions.
         
         :param bam_path: Path to source BAM file
@@ -599,7 +599,14 @@ class VCFParser:
         
         return data
     
-    def _create_bam_subsets(self, data: pd.DataFrame, subset_path: str, subset_padding: int, max_workers: int, force_overwrite: bool) -> None:
+    def _create_bam_subsets(
+            self, 
+            data: pd.DataFrame, 
+            subset_path: str, 
+            subset_padding: int, 
+            max_workers: int, 
+            force_overwrite: bool
+        ) -> None:
         """Create BAM subsets for mutant samples only (references handled separately).
         
         :param data: DataFrame with variant data
