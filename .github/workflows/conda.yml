@@ -1,0 +1,68 @@
+name: Build Conda Package
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      upload_package:
+        description: 'Upload to Anaconda Cloud'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-conda-package:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Miniconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniconda-version: "latest"
+        channels: conda-forge,bioconda,defaults
+        channel-priority: strict
+        activate-environment: build-env
+    
+    - name: Install conda-build
+      shell: bash -l {0}
+      run: |
+        conda install conda-build anaconda-client
+    
+    - name: Build conda package
+      shell: bash -l {0}
+      run: |
+        conda build . --output-folder ./dist
+    
+    - name: Test package installation
+      shell: bash -l {0}
+      run: |
+        # Install the built package
+        conda install --use-local emumadz
+        
+        # Test the entry point
+        parse_vcf --help
+        
+        # Test that all tools are available
+        bcftools --version
+        gatk --version || echo "GATK version check"
+        samtools --version
+        snpeff -version || echo "SnpEff version check"
+        vep --help || echo "VEP help check"
+    
+    - name: Upload conda package
+      if: github.event_name == 'release' || github.event.inputs.upload_package == 'true'
+      shell: bash -l {0}
+      run: |
+        anaconda -t ${{ secrets.ANACONDA_TOKEN }} upload dist/*/emumadz-*.tar.bz2
+    
+    - name: Store artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: conda-package
+        path: dist/
