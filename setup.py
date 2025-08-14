@@ -1,0 +1,30 @@
+#!/usr/bin/python
+from setuptools import setup, find_packages
+
+setup(
+    name="emumadz",
+    version="0.2.0",
+    packages=find_packages(),
+    package_dir={"": "source"},
+    entry_points={
+        'console_scripts': [
+            'parse_vcf=parse_vcf:main',
+        ],
+    },
+    install_requires=[
+        "pandas>=2.3.0",
+        "pyvcf>=0.6.8",
+    ],
+    python_requires=">=3.13",
+    author="Tyrone Chen",
+    author_email="tyrone.chen@petermac.org",
+    description="Enhanced MUtation MApping and Detection in Zebrafish",
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
+    url="https://github.com/hoganlab-fish/whole_genome_sequencing",
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ],
+)

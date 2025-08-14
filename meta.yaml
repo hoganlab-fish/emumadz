@@ -1,0 +1,47 @@
+# emumadz
+package:
+  name: emumadz
+  version: "0.2.0"
+
+source:
+  path: .
+
+build:
+  number: 0
+  noarch: python
+  entry_points:
+    - parse_vcf = parse_vcf:main
+
+requirements:
+  host:
+    - python >=3.13
+    - setuptools
+    - pip
+  run:
+    - python >=3.13
+    - bcftools =1.19
+    - gatk4 =4.5.0.0
+    - pandas =2.3.0
+    - pyvcf =0.6.8
+    - samtools =1.19.2
+    - snpeff =5.2
+    - ensembl-vep =114.2
+
+test:
+  imports:
+    - parse_vcf
+  commands:
+    - parse_vcf --help
+
+about:
+  home: https://github.com/hoganlab-fish/whole_genome_sequencing
+  license: MIT
+  license_file: LICENSE
+  summary: Enhanced MUtation MApping and Detection in Zebrafish
+  description: |
+    A conda package for SNP detection.
+  dev_url: https://github.com/hoganlab-fish/whole_genome_sequencing
+
+extra:
+  recipe-maintainers:
+    - tyronechen
