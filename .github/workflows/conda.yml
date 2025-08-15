@@ -33,7 +33,13 @@ jobs:
       shell: bash -l {0}
       run: |
         conda install conda-build anaconda-client
-    
+
+    - name: Resolve package conflicts
+      shell: bash -l {0}
+      run: |
+        conda config --set channel_priority flexible
+        conda install --force-reinstall mysql-connector-c
+
     - name: Build conda package
       shell: bash -l {0}
       run: |
