@@ -10,7 +10,7 @@ build:
   number: 0
   noarch: python
   entry_points:
-    - parse_vcf = parse_vcf:main
+    - emumadz = parse_vcf:main
 
 requirements:
   host:

@@ -8,7 +8,7 @@ setup(
     package_dir={"": "source"},
     entry_points={
         'console_scripts': [
-            'parse_vcf=parse_vcf:main',
+            'emumadz=parse_vcf:main',
         ],
     },
     python_requires=">=3.9",
