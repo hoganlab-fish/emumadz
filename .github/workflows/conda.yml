@@ -26,14 +26,15 @@ jobs:
       with:
         miniconda-version: "latest"
         channels: conda-forge,bioconda,defaults
-        channel-priority: strict
+        channel-priority: flexible
         activate-environment: build-env
+        mamba-version: "*"
     
     - name: Install conda-build
       shell: bash -l {0}
       run: |
-        conda install conda-build conda-verify anaconda-client
-        conda remove --force mysql-server mysql-connector-c || true
+        mamba install conda-build conda-verify anaconda-client
+        conda config --set allow_conda_downgrades true
 
     - name: Build conda package
       shell: bash -l {0}
