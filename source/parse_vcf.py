@@ -15,7 +15,7 @@ class VCFParser:
             vcf_file: str, 
             samplesheet_file: str, 
             chrom_mapping_file: Optional[str] = None
-            ):
+        ):
         """Parse annotated VCF files and create BAM subsets for variant analysis.
         
         This class processes VCF files with VEP/SnpEff annotations, matches samples 
@@ -54,6 +54,35 @@ class VCFParser:
             sample_id: bam_path for sample_id, (bam_path, sample_type) 
             in self.sample_info.items() if sample_type.lower() in ['control', 'reference']
             }
+    
+    def get_relative_bam_path(
+            self, output_file: str, bam_filename: str, subset_path: str
+        ) -> str:
+        """Get the correct relative path from output JSON to BAM file.
+        
+        :param output_file: Path to the output JSON/CSV file
+        :type output_file: str
+        :param bam_filename: BAM filename (e.g., "sample_mutant.bam")
+        :type bam_filename: str
+        :param subset_path: Directory where BAM subsets are created
+        :type subset_path: str
+        :returns: Relative path from JSON to BAM file
+        :rtype: str
+        """
+        if not subset_path or not bam_filename:
+            return bam_filename
+        
+        # Get absolute paths
+        output_dir = os.path.dirname(os.path.abspath(output_file))
+        bam_abs_path = os.path.abspath(os.path.join(subset_path, bam_filename))
+        
+        # Calculate relative path from output directory to BAM file
+        try:
+            relative_path = os.path.relpath(bam_abs_path, output_dir)
+            return relative_path
+        except ValueError:
+            # If on different drives (Windows), return absolute path
+            return bam_abs_path
     
     def parse_csq_field(self, csq_string: str) -> List[Dict[str, str]]:
         """Parse VEP CSQ field.
@@ -167,7 +196,7 @@ class VCFParser:
             subset_path: str, 
             variant_positions: List[Tuple[str, int]], 
             padding: int = 5
-            ) -> Dict[str, str]:
+        ) -> Dict[str, str]:
         """Create chromosome-renamed reference BAM subsets for all reference samples.
         
         :param subset_path: Output directory for subset BAMs
@@ -538,6 +567,9 @@ class VCFParser:
             vep_full = json.dumps(vep_annotations) if vep_annotations else ''
             snpeff_full = json.dumps(snpeff_annotations) if snpeff_annotations else ''
             
+            # Generate BAM subset filenames (will be converted to relative paths later)
+            mutant_bam_filename = f"{sample_name}_mutant.bam" if subset_path else ""
+            
             variant_data = {
                 'variant_id': variant_id,
                 'chromosome': record.chrom,
@@ -547,7 +579,7 @@ class VCFParser:
                 'sample_id': sample_name,
                 'sample_type': sample_type,
                 'bam_path': bam_path,
-                'mutant_bam_subset_path': f"{sample_name}_mutant.bam" if subset_path else "",
+                'mutant_bam_subset_path': mutant_bam_filename,
                 'reference_bam_paths': '|'.join(reference_bam_paths),
                 'genotype': gt_str,
                 'depth': dp or 0,
@@ -571,13 +603,8 @@ class VCFParser:
             
             variants.append(variant_data)
         
-        # Create DataFrame and save
+        # Create DataFrame
         data = pd.DataFrame(variants)
-        data.to_csv(output_file, index=False)
-        
-        # Save JSON
-        json_output = output_file.replace('.csv', '.json')
-        data.to_json(json_output, orient='records', indent=2)
         
         # Create BAM subsets if requested
         if subset_path and len(data) > 0:
@@ -588,6 +615,19 @@ class VCFParser:
             
             self._create_bam_subsets(data, subset_path, subset_padding, max_workers, force_overwrite)
             
+            # Update BAM paths to relative paths after subset creation
+            data['mutant_bam_subset_path'] = data['mutant_bam_subset_path'].apply(
+                lambda x: self.get_relative_bam_path(output_file, x, subset_path) if x else ''
+            )
+            
+            # Update reference BAM paths to relative paths
+            data['reference_bam_paths'] = data['reference_bam_paths'].apply(
+                lambda x: '|'.join([
+                    self.get_relative_bam_path(output_file, ref_path, subset_path) 
+                    for ref_path in x.split('|') if ref_path
+                ]) if x else ''
+            )
+            
             # Generate coverage report if requested
             if coverage_report:
                 report_data = self.generate_coverage_report(data, subset_path)
@@ -596,6 +636,13 @@ class VCFParser:
                 print(f"Regions processed: {len(report_data)}")
                 print(f"Successful subsets: {report_data['subset_exists'].sum()}")
                 print(f"Average coverage rate: {report_data['coverage_rate'].mean():.2%}")
+        
+        # Save files
+        data.to_csv(output_file, index=False)
+        
+        # Save JSON with correct relative paths
+        json_output = output_file.replace('.csv', '.json')
+        data.to_json(json_output, orient='records', indent=2)
         
         return data
     
@@ -668,7 +715,7 @@ class VCFParser:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description='Parse annotated VCF into tables with optional BAM subsetting'
-        )
+    )
     parser.add_argument('vcf', type=str,
                         help='Merged VCF file with VEP and SnpEff annotations')
     parser.add_argument('samplesheet', type=str,
