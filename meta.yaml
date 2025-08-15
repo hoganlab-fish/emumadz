@@ -38,9 +38,9 @@ requirements:
 
 test:
   imports:
-    - parse_vcf
+    - emumadz.parse_vcf
   commands:
-    - parse_vcf --help
+    - emumadz --help
 
 about:
   home: https://github.com/hoganlab-fish/whole_genome_sequencing
