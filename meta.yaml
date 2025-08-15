@@ -37,8 +37,8 @@ requirements:
     - perl-list-moreutils >=0.430    
 
 test:
-  imports:
-    - emumadz.parse_vcf
+  # imports:
+  #   - emumadz.parse_vcf
   commands:
     - emumadz --help
 
