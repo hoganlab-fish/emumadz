@@ -12,10 +12,10 @@ setup(
         ],
     },
     install_requires=[
-        "pandas>=2.3.0",
-        "pyvcf>=0.6.8",
+        "pandas>=2.0.0",
+        "pyvcf>=0.6.0",
     ],
-    python_requires=">=3.13",
+    python_requires=">=3.9",
     author="Tyrone Chen",
     author_email="tyrone.chen@petermac.org",
     description="Enhanced MUtation MApping and Detection in Zebrafish",

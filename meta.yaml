@@ -14,15 +14,15 @@ build:
 
 requirements:
   host:
-    - python >=3.13
+    - python >=3.9
     - setuptools
     - pip
   run:
-    - python >=3.13
+    - python >=3.9
     - bcftools =1.19
     - gatk4 =4.5.0.0
-    - pandas =2.3.0
-    - pyvcf =0.6.8
+    - pandas =2.0.0
+    - pyvcf =0.6.0
     - samtools =1.19.2
     - snpeff =5.2
     - ensembl-vep =114.2
