@@ -23,7 +23,7 @@ Code in this repository is provided under a `MIT license`_. This documentation i
 
 .. _ben.hogan@petermac.org: mailto:ben.hogan@petermac.org
 
-We thank Richard Lupat and Jason Li from the Bioinformatics Core (RRID: SCR_025901) at Peter MacCallum Cancer Centre for their contributions to the pipeline.
+We thank Tyrone Chen, Richard Lupat and Jason Li from the Bioinformatics Core (RRID: SCR_025901) at the Peter MacCallum Cancer Centre for their contributions to the pipeline.
 
 Contains the documentation for our custom zebrafish whole genome sequencing pipeline.
 
