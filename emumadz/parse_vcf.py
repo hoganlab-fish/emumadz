@@ -221,6 +221,7 @@ class VCFParser:
                 reference_bam_paths[ref_sample_id] = f"{ref_sample_id}_reference.bam"
                 continue
                 
+            # Pass ALL variant positions to create_bam_subset, not just the first one
             success = self.create_bam_subset(ref_bam_path, variant_positions, output_path, padding)
             if success:
                 reference_bam_paths[ref_sample_id] = f"{ref_sample_id}_reference.bam"
