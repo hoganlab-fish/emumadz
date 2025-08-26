@@ -195,7 +195,8 @@ class VCFParser:
             self, 
             subset_path: str, 
             variant_positions: List[Tuple[str, int]], 
-            padding: int = 5
+            padding: int = 5,
+            force_overwrite: bool = False
         ) -> Dict[str, str]:
         """Create chromosome-renamed reference BAM subsets for all reference samples.
         
@@ -205,6 +206,8 @@ class VCFParser:
         :type variant_positions: List[Tuple[str, int]]
         :param padding: Base pairs around variants
         :type padding: int
+        :param force_overwrite: Overwrites bam files
+        :type force_overwrite: bool
         :returns: Dictionary mapping sample_id to output BAM path
         :rtype: Dict[str, str]
         """
@@ -217,7 +220,7 @@ class VCFParser:
             output_path = os.path.join(subset_path, f"{ref_sample_id}_reference.bam")
             
             # Skip if already exists
-            if os.path.exists(output_path):
+            if os.path.exists(output_path) and not force_overwrite:
                 reference_bam_paths[ref_sample_id] = f"{ref_sample_id}_reference.bam"
                 continue
                 
@@ -552,17 +555,9 @@ class VCFParser:
             reference_bam_paths = []
             if subset_path and reference_samples:
                 # Create shared reference BAMs if chromosome mapping exists
-                if self.chrom_mapping:
-                    ref_bam_dict = self.create_reference_bam_subsets(
-                        subset_path, [(record.chrom, record.pos)], subset_padding
-                    )
-                    reference_bam_paths = [
-                        f"{ref_id}_reference.bam" for ref_id in ref_bam_dict.keys()
-                    ]
-                else:
-                    reference_bam_paths = [
-                        f"{ref_name}_reference.bam" for ref_name, _, _ in reference_samples
-                    ]
+                reference_bam_paths = [
+                    f"{ref_name}_reference.bam" for ref_name, _, _ in reference_samples
+                ]
             
             # Get full annotations as JSON strings
             vep_full = json.dumps(vep_annotations) if vep_annotations else ''
