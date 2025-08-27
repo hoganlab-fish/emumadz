@@ -556,7 +556,8 @@ class VCFParser:
             if subset_path and reference_samples:
                 # Create shared reference BAMs if chromosome mapping exists
                 reference_bam_paths = [
-                    f"{ref_name}_reference.bam" for ref_name, _, _ in reference_samples
+                    f"{ref_sample_id}_reference.bam" 
+                    for ref_sample_id in self.reference_samples.keys()
                 ]
             
             # Get full annotations as JSON strings
