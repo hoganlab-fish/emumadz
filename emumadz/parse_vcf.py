@@ -195,7 +195,6 @@ class VCFParser:
             self, 
             subset_path: str, 
             variant_positions: List[Tuple[str, int]], 
-            padding: int = 5,
             force_overwrite: bool = False
         ) -> Dict[str, str]:
         """Create chromosome-renamed reference BAM subsets for all reference samples.
@@ -204,8 +203,6 @@ class VCFParser:
         :type subset_path: str
         :param variant_positions: List of (chromosome, position) tuples
         :type variant_positions: List[Tuple[str, int]]
-        :param padding: Base pairs around variants
-        :type padding: int
         :param force_overwrite: Overwrites bam files
         :type force_overwrite: bool
         :returns: Dictionary mapping sample_id to output BAM path
@@ -225,7 +222,7 @@ class VCFParser:
                 continue
                 
             # Pass ALL variant positions to create_bam_subset, not just the first one
-            success = self.create_bam_subset(ref_bam_path, variant_positions, output_path, padding)
+            success = self.create_bam_subset(ref_bam_path, variant_positions, output_path)
             if success:
                 reference_bam_paths[ref_sample_id] = f"{ref_sample_id}_reference.bam"
         
@@ -235,8 +232,7 @@ class VCFParser:
             self, 
             bam_path: str, 
             variant_positions: List[Tuple[str, int]], 
-            output_path: str, 
-            padding: int = 5
+            output_path: str
         ) -> bool:
         """Create subset BAM containing reads around variant positions.
         
@@ -246,8 +242,6 @@ class VCFParser:
         :type variant_positions: List[Tuple[str, int]]
         :param output_path: Output BAM file path
         :type output_path: str
-        :param padding: Base pairs around variants
-        :type padding: int
         :returns: Success status
         :rtype: bool
         """
@@ -284,33 +278,32 @@ class VCFParser:
                                 bam_chrom = old_name
                                 break
                     
-                    start = max(0, pos - padding)
-                    end = pos + padding
                     region_key = (bam_chrom, start, end)
                     
                     if region_key in processed_regions:
                         continue
                     processed_regions.add(region_key)
                     
-                    for read in inbam.fetch(bam_chrom, start, end):
-                        if self.chrom_mapping and read.reference_name in self.chrom_mapping:
-                            # Create new read with renamed reference
-                            new_read = pysam.AlignedSegment(outbam.header)
-                            new_read.query_name = read.query_name
-                            new_read.query_sequence = read.query_sequence
-                            new_read.flag = read.flag
-                            new_read.reference_id = outbam.header.get_tid(self.chrom_mapping[read.reference_name])
-                            new_read.reference_start = read.reference_start
-                            new_read.mapping_quality = read.mapping_quality
-                            new_read.cigar = read.cigar
-                            new_read.next_reference_id = read.next_reference_id
-                            new_read.next_reference_start = read.next_reference_start
-                            new_read.template_length = read.template_length
-                            new_read.query_qualities = read.query_qualities
-                            new_read.tags = read.tags
-                            outbam.write(new_read)
-                        else:
-                            outbam.write(read)
+                    for read in inbam.fetch(bam_chrom, pos-1, pos+1):
+                        if read.reference_start <= pos-1 and read.reference_end >= pos:
+                            if self.chrom_mapping and read.reference_name in self.chrom_mapping:
+                                # Create new read with renamed reference
+                                new_read = pysam.AlignedSegment(outbam.header)
+                                new_read.query_name = read.query_name
+                                new_read.query_sequence = read.query_sequence
+                                new_read.flag = read.flag
+                                new_read.reference_id = outbam.header.get_tid(self.chrom_mapping[read.reference_name])
+                                new_read.reference_start = read.reference_start
+                                new_read.mapping_quality = read.mapping_quality
+                                new_read.cigar = read.cigar
+                                new_read.next_reference_id = read.next_reference_id
+                                new_read.next_reference_start = read.next_reference_start
+                                new_read.template_length = read.template_length
+                                new_read.query_qualities = read.query_qualities
+                                new_read.tags = read.tags
+                                outbam.write(new_read)
+                            else:
+                                outbam.write(read)
         
         # Sort and index
         sorted_path = output_path.replace('.bam', '_sorted.bam')
@@ -323,15 +316,12 @@ class VCFParser:
     def process_sample_variants(
             self, 
             sample_data: Dict[str, Union[str, pd.DataFrame]], 
-            padding: int = 5, 
             force_overwrite: bool = False
         ) -> bool:
         """Process all variants for a single sample and create subset BAM.
         
         :param sample_data: Dictionary containing sample info and variants
         :type sample_data: Dict[str, Union[str, pd.DataFrame]]
-        :param padding: Base pairs around variants
-        :type padding: int
         :param force_overwrite: Whether to overwrite existing files
         :type force_overwrite: bool
         :returns: Success status
@@ -352,7 +342,7 @@ class VCFParser:
             (row['chromosome'], row['position']) for _, row in variants.iterrows()
         ]
         return self.create_bam_subset(
-            bam_path, variant_positions, output_path, padding
+            bam_path, variant_positions, output_path,
         )
     
     def validate_bam_subset(
@@ -479,7 +469,6 @@ class VCFParser:
             self,
             output_file: str,
             subset_path: Optional[str] = None, 
-            subset_padding: int = 5, 
             max_workers: int = 4, 
             force_overwrite: bool = False, 
             coverage_report: Optional[str] = None
@@ -490,8 +479,6 @@ class VCFParser:
         :type output_file: str
         :param subset_path: Directory for subset BAM files
         :type subset_path: Optional[str]
-        :param subset_padding: Base pairs around variants for BAM subsets
-        :type subset_padding: int
         :param max_workers: Number of parallel workers for BAM subsetting
         :type max_workers: int
         :param force_overwrite: Whether to overwrite existing files
@@ -608,9 +595,9 @@ class VCFParser:
             # Create shared reference BAMs first if chromosome mapping is provided
             if self.chrom_mapping and self.reference_samples:
                 all_variants = [(row['chromosome'], row['position']) for _, row in data.iterrows()]
-                self.create_reference_bam_subsets(subset_path, all_variants, subset_padding)
+                self.create_reference_bam_subsets(subset_path, all_variants)
             
-            self._create_bam_subsets(data, subset_path, subset_padding, max_workers, force_overwrite)
+            self._create_bam_subsets(data, subset_path, max_workers, force_overwrite)
             
             # Update BAM paths to relative paths after subset creation
             data['mutant_bam_subset_path'] = data['mutant_bam_subset_path'].apply(
@@ -647,7 +634,6 @@ class VCFParser:
             self, 
             data: pd.DataFrame, 
             subset_path: str, 
-            subset_padding: int, 
             max_workers: int, 
             force_overwrite: bool
         ) -> None:
@@ -657,8 +643,6 @@ class VCFParser:
         :type data: pd.DataFrame
         :param subset_path: Output directory path
         :type subset_path: str
-        :param subset_padding: Base pairs padding around variants
-        :type subset_padding: int
         :param max_workers: Number of parallel workers
         :type max_workers: int
         :param force_overwrite: Whether to overwrite existing files
@@ -696,7 +680,6 @@ class VCFParser:
                 executor.submit(
                     self.process_sample_variants, 
                     sample_data, 
-                    subset_padding, 
                     force_overwrite
                     ): sample_data['sample_id']
                 for sample_data in unique_sample_data
@@ -721,8 +704,6 @@ def main() -> None:
                         help='Output CSV file')
     parser.add_argument('--subset_path', type=str, default=None, 
                         help='Directory path for subset BAM files')
-    parser.add_argument('--subset_padding', type=int, default=5, 
-                        help='Base pairs (-/+) around variants for BAM subsets')
     parser.add_argument('--subset_workers', type=int, default=4, 
                         help='Number of parallel workers for BAM subsetting')
     parser.add_argument('--chrom_mapping', type=str, default=None, 
@@ -739,7 +720,6 @@ def main() -> None:
     data = vcf_parser.process_vcf(
         args.outfile_path,
         subset_path=args.subset_path,
-        subset_padding=args.subset_padding,
         max_workers=args.subset_workers,
         force_overwrite=args.force_overwrite,
         coverage_report=args.coverage_report
