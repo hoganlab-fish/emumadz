@@ -764,6 +764,143 @@ The aim is to visualise the tracks containing all reads at each SNP position. Vi
         prep_vis $sample
     done
 
+The tables generated here contain all the necessary information which can be visualised in the user's method of choice (e.g. ``R`` or ``pandas`` dataframes.) The ``bam`` files (subsetted or full) can be viewed in the user's genomic browser of choice, e.g. ``IGV``, ``JBrowse``, ``gosling``.
+
+.. tip::
+
+    After this step, no further data is generated.
+
+Visualisation module
+++++++++++++++++++++
+
+.. caution::
+    This part is more involved and is intended for developers who want to host a web page to view the data.
+
+.. tip::
+    Can also be set up on localhost to view.
+
+Install dependencies
+********************
+
+Install ``npm`` `following the instructions for your own operating system`_. A few ``linux`` examples are provided.
+
+.. _following the instructions for your own operating system: https://docs.npmjs.com/downloading-and-installing-node-js-and-npm
+
+.. code-block:: shell
+
+    # Ubuntu/Debian
+    sudo apt install nodejs npm
+
+    # CentOS/RHEL
+    sudo yum install nodejs npm
+
+.. hint::
+    If you get an error saying the host name cannot be resolved, try the following (at your own risk).
+
+    .. code-block:: shell
+
+        sudo sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+        sudo sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 
 
+Then install ``igv-dist``.
 
+.. code-block:: shell
+
+    npm install express
+
+    mkdir igv-dist
+    curl -o igv-dist/igv.min.js https://cdn.jsdelivr.net/npm/igv@2.15.11/dist/igv.min.js
+    curl -o igv-dist/igv.css https://cdn.jsdelivr.net/npm/igv@2.15.11/dist/igv.css
+
+Our ``html`` file calls the local script.
+
+.. code-block:: html
+
+    <script src="/api/igv-proxy/igv.min.js"></script>
+    <link rel="stylesheet" href="/api/igv-proxy/igv.css">
+
+Custom genome
+*************
+
+Current version of ``IGV`` does not support genome ``danRer9`` by default.
+
+.. tip::
+    If you want to add your own custom genome, you can follow the steps here.
+
+.. code-block:: shell
+
+    genome_dir="igv-genomes/danRer7/"
+    fasta_path=${genomes_dir}/danRer7.fa
+    index_path=${genomes_dir}/danRer7.fa.fai
+    annot_path=${genomes_dir}/danRer7.gff
+    mapfile=${genomes_dir}/mapfile.txt
+
+    mkdir -p ${genomes_dir}
+
+    cp ${REF_FIXED_FA} ${fasta_path}
+    cp ${REF_FIXED_FA}.fai ${index_path}
+    wget 'https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/002/035/GCF_000002035.4_Zv9/GCF_000002035.4_Zv9_genomic.gff.gz' -o ${annot_path}
+    gzip -d ${annot_path}.gz
+
+    paste <(grep -v '#' ${annot_path} | cut -f1 | uniq | grep NC_007) \
+        <(seq 1 25 | sed 's/^/chr/') > ${mapfile}
+
+    awk 'BEGIN{FS=OFS="\t"} FNR==NR{map[$1]=$2; next} {if($1 in map) $1=map[$1]; print}' ${mapfile} ${annot_path} > tmp.gff
+
+    mv tmp.gff ${annot_path}
+
+.. note::
+    Use the fixed ``fasta`` file and indices with the chromosome names corresponding to the ``bam`` files.
+
+Directory structure
+*******************
+
+At the end, your directory structure should look like this.
+
+Core server files::
+
+    variant_viewer.html
+    file_server.py
+
+``IGV`` genome browser source files::
+
+    igv-dist/
+    ├── igv.css
+    └── igv.min.js
+
+Data files::
+
+    data/
+    ├── ${SAMPLE_NAME}/
+    │   ├── ${SAMPLE_NAME}_mutant.bam
+    │   ├── ${SAMPLE_NAME}_mutant.bam.bai 
+    │   ├── ${REFERENCE_NAME}_reference.bam
+    │   ├── ${REFERENCE_NAME}_reference.bam.bai 
+    │   ...
+    ├── ${SAMPLE_NAME}.csv
+    ├── ${SAMPLE_NAME}.json
+    └── ${SAMPLE_NAME}_coverage.csv
+
+Custom reference genomes (in this case ``danRer7``)::
+
+    igv-genomes/
+    ├── danRer7/
+    │   ├── danRer7.fa
+    │   ├── danRer7.fa.fai
+    │   └── danRer7.gff (optional)
+    └── genomes.json
+
+You can modify ``genomes.json`` as needed for your use case. Then modify the ``html`` directly to add the corresponding value matching the ``id`` to the drop-down list.
+
+.. code-block:: python
+
+    {
+        "danRer7": {
+            "id": "danRer7",
+            "name": "Zebrafish Zv9 (danRer7)",
+            "fastaURL": "/genomes/danRer7/danRer7.fa",
+            "indexURL": "/genomes/danRer7/danRer7.fa.fai",
+            "chromosomeOrder": "chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chr23,chr24,chr25,chrM"
+        }
+    }
