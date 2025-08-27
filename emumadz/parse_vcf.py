@@ -232,7 +232,7 @@ class VCFParser:
             self, 
             bam_path: str, 
             variant_positions: List[Tuple[str, int]], 
-            output_path: str
+            output_path: str 
         ) -> bool:
         """Create subset BAM containing reads around variant positions.
         
@@ -278,32 +278,33 @@ class VCFParser:
                                 bam_chrom = old_name
                                 break
                     
+                    start = max(0, pos - 1)
+                    end = pos + 1
                     region_key = (bam_chrom, start, end)
                     
                     if region_key in processed_regions:
                         continue
                     processed_regions.add(region_key)
                     
-                    for read in inbam.fetch(bam_chrom, pos-1, pos+1):
-                        if read.reference_start <= pos-1 and read.reference_end >= pos:
-                            if self.chrom_mapping and read.reference_name in self.chrom_mapping:
-                                # Create new read with renamed reference
-                                new_read = pysam.AlignedSegment(outbam.header)
-                                new_read.query_name = read.query_name
-                                new_read.query_sequence = read.query_sequence
-                                new_read.flag = read.flag
-                                new_read.reference_id = outbam.header.get_tid(self.chrom_mapping[read.reference_name])
-                                new_read.reference_start = read.reference_start
-                                new_read.mapping_quality = read.mapping_quality
-                                new_read.cigar = read.cigar
-                                new_read.next_reference_id = read.next_reference_id
-                                new_read.next_reference_start = read.next_reference_start
-                                new_read.template_length = read.template_length
-                                new_read.query_qualities = read.query_qualities
-                                new_read.tags = read.tags
-                                outbam.write(new_read)
-                            else:
-                                outbam.write(read)
+                    for read in inbam.fetch(bam_chrom, start, end):
+                        if self.chrom_mapping and read.reference_name in self.chrom_mapping:
+                            # Create new read with renamed reference
+                            new_read = pysam.AlignedSegment(outbam.header)
+                            new_read.query_name = read.query_name
+                            new_read.query_sequence = read.query_sequence
+                            new_read.flag = read.flag
+                            new_read.reference_id = outbam.header.get_tid(self.chrom_mapping[read.reference_name])
+                            new_read.reference_start = read.reference_start
+                            new_read.mapping_quality = read.mapping_quality
+                            new_read.cigar = read.cigar
+                            new_read.next_reference_id = read.next_reference_id
+                            new_read.next_reference_start = read.next_reference_start
+                            new_read.template_length = read.template_length
+                            new_read.query_qualities = read.query_qualities
+                            new_read.tags = read.tags
+                            outbam.write(new_read)
+                        else:
+                            outbam.write(read)
         
         # Sort and index
         sorted_path = output_path.replace('.bam', '_sorted.bam')
@@ -342,7 +343,7 @@ class VCFParser:
             (row['chromosome'], row['position']) for _, row in variants.iterrows()
         ]
         return self.create_bam_subset(
-            bam_path, variant_positions, output_path,
+            bam_path, variant_positions, output_path
         )
     
     def validate_bam_subset(
