@@ -109,4 +109,4 @@ if __name__ == '__main__':
     os.makedirs('data', exist_ok=True)
     os.makedirs('igv-dist', exist_ok=True)
     os.makedirs('igv-genomes/danRer7', exist_ok=True)
-    app.run(host='localhost', port=5010, debug=True)
+    app.run(host='0.0.0.0', port=5010, debug=True)
