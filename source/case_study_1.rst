@@ -885,8 +885,10 @@ At the end, your directory structure should look like this::
         │   └── mapfile.txt
         └── genomes.json
 
-.. note::
-    We need the ``mapfile.txt`` in this case to match chromosome names to the updated ones. The ``gff`` file is optional but provides useful annotations for gene regions.
+We need the ``mapfile.txt`` in this case to match chromosome names to the updated ones. Configuration files are provided as part of the repository, but larger genome and data files are not. Instructions on how to obtain or regenerate these are covered in previous steps.
+
+.. hint::
+    For data, symlinking ``results/10_visualisations`` to ``vis/data`` should work normally after completing the previous steps in the pipeline. For visualisation, the ``gff`` file is optional but provides useful annotations for gene regions. 
 
 Core server files::
 
