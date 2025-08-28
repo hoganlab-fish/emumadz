@@ -803,7 +803,10 @@ Install ``npm`` `following the instructions for your own operating system`_. A f
         sudo sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 
 
-Then install ``igv-dist``.
+Then install ``igv-dist``. 
+
+.. note::
+    ``IGV`` code is also redistributed in this repository under the `MIT license`_.
 
 .. code-block:: shell
 
@@ -823,7 +826,7 @@ Our ``html`` file calls the local script.
 Custom genome
 *************
 
-Current version of ``IGV`` does not support genome ``danRer9`` by default.
+Current version of ``IGV`` does not support genome assembly ``danRer7`` (Zv9) by default.
 
 .. tip::
     If you want to add your own custom genome, you can follow the steps here.
@@ -856,20 +859,41 @@ Current version of ``IGV`` does not support genome ``danRer9`` by default.
 Directory structure
 *******************
 
-At the end, your directory structure should look like this.
+At the end, your directory structure should look like this::
+
+    vis/
+    ├── variant_viewer.html
+    ├── file_server.py
+    ├── data/
+    │   ├── ${SAMPLE_NAME}/
+    │   │   ├── ${SAMPLE_NAME}_mutant.bam
+    │   │   ├── ${SAMPLE_NAME}_mutant.bam.bai 
+    │   │   ├── ${REFERENCE_NAME}_reference.bam
+    │   │   ├── ${REFERENCE_NAME}_reference.bam.bai 
+    │   │   ...
+    │   ├── ${SAMPLE_NAME}.csv
+    │   ├── ${SAMPLE_NAME}.json
+    │   └── ${SAMPLE_NAME}_coverage.csv    
+    ├── igv-dist/
+    │   ├── igv.css
+    │   └── igv.min.js
+    └── igv-genomes/
+        ├── danRer7/
+        │   ├── danRer7.fa
+        │   ├── danRer7.fa.fai
+        │   ├── danRer7.gff
+        │   └── mapfile.txt
+        └── genomes.json
+
+.. note::
+    We need the ``mapfile.txt`` in this case to match chromosome names to the updated ones. The ``gff`` file is optional but provides useful annotations for gene regions.
 
 Core server files::
 
     variant_viewer.html
     file_server.py
 
-``IGV`` genome browser source files::
-
-    igv-dist/
-    ├── igv.css
-    └── igv.min.js
-
-Data files::
+Data files, where the contents of ``data`` are the same as ``10_visualisations``::
 
     data/
     ├── ${SAMPLE_NAME}/
@@ -882,6 +906,12 @@ Data files::
     ├── ${SAMPLE_NAME}.json
     └── ${SAMPLE_NAME}_coverage.csv
 
+``IGV`` genome browser source files::
+
+    igv-dist/
+    ├── igv.css
+    └── igv.min.js
+
 Custom reference genomes (in this case ``danRer7``)::
 
     igv-genomes/
@@ -890,6 +920,9 @@ Custom reference genomes (in this case ``danRer7``)::
     │   ├── danRer7.fa.fai
     │   └── danRer7.gff (optional)
     └── genomes.json
+
+.. caution::
+    The chromosome names in the ``gff`` files must match the ``fasta`` and ``alignment`` files.
 
 You can modify ``genomes.json`` as needed for your use case. Then modify the ``html`` directly to add the corresponding value matching the ``id`` to the drop-down list.
 
