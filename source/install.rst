@@ -172,3 +172,40 @@ You will need to download the corresponding zebrafish genome database. If instal
 .. code-block:: shell
   
     snpEff download Zv9.75
+
+Visualisation module (OPTIONAL)
+*******************************
+
+.. caution::
+    This part is more involved and is intended for developers who want to host a web server to view the data. This will also work on a local machine though.
+
+Install ``npm`` `following the instructions for your own operating system`_. A few ``linux`` examples are provided.
+
+.. _following the instructions for your own operating system: https://docs.npmjs.com/downloading-and-installing-node-js-and-npm
+
+.. code-block:: shell
+
+    # Ubuntu/Debian
+    sudo apt install nodejs npm
+
+    # CentOS/RHEL
+    sudo yum install nodejs npm
+
+.. hint::
+    If you get an error saying the host name cannot be resolved, try the following (at your own risk).
+
+    .. code-block:: shell
+
+        sudo sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+        sudo sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+
+
+Then install ``igv-dist``.
+
+.. code-block:: shell
+
+    npm install express
+
+    mkdir igv-dist
+    curl -o igv-dist/igv.min.js https://cdn.jsdelivr.net/npm/igv@2.15.11/dist/igv.min.js
+    curl -o igv-dist/igv.css https://cdn.jsdelivr.net/npm/igv@2.15.11/dist/igv.css
