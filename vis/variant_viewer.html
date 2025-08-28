@@ -328,7 +328,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>EMUMADZ Variant Analysis Viewer</h1>
+            <h1>EMUMADZ Variant Analysis Viewer F0-F2</h1>
             <div id="sampleInfo" style="display:none; margin-top: 10px; font-size: 1.1rem; opacity: 0.9;"></div>
             <button class="btn" id="backToFilesBtn" style="display:none; margin-top: 10px;" onclick="showFileList()">← Back to File Landing Page</button>
         </div>
@@ -429,6 +429,10 @@
                 <button class="btn" id="refreshIGVBtn" onclick="forceIGVRefresh()">Refresh IGV</button>
             </div>
             
+            <p>
+                <span style="color: #0000ff"><em>Contact tyrone if you experience any bugs or have a feature request. In both cases please provide as much information as possible (e.g. steps taken to reproduce a problem). Screenshots may be helpful. Routine (mainly technical) testing was already done, but some bugs may remain.</em></span>
+            </p>
+
             <div class="tabs">
                 <button class="tab active" onclick="showTab('table')">Variant Table</button>
                 <button class="tab" onclick="showTab('igv')">IGV Browser</button>
@@ -477,6 +481,7 @@
                         This is not an error. The tracks include reads of all quality levels by design to provide the maximum possible level of information.
                         Clicking on the individual reads will yield more information on mapping quality and other read-specific information. 
                         Note that reads with low mapping quality or phred score were naturally excluded from the allele frequency calculations, even if they appear on the tracks.
+                        <span style="color: #ff0000">The custom genome annotation coordinates reflects the zebrafish genome assembly Zv9 only. Newer genome versions are provided for testing purposes only and should not be used for this experiment. Automated checks for annotation file compatibility will be implemented later.</span>
                     </p>
                 </div>                 
                 <div id="igv-info" style="display:none; background: #f8f9fa; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid #667eea;">
