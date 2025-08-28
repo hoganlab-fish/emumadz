@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-elem 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' *; img-src 'self' data: *">
+    <!-- <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-elem 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' *; img-src 'self' data: *"> -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <title>EMUMADZ Variant Analysis Viewer</title>
     <script src="/api/igv-proxy/igv.min.js"></script>
     <link rel="stylesheet" href="/api/igv-proxy/igv.css">
@@ -157,6 +158,46 @@
         .impact-low { background-color: rgba(50, 205, 50, 0.1); }
         .impact-modifier { background-color: rgba(135, 206, 235, 0.1); }
 
+        .frozen-col {
+            position: sticky;
+            background: #f8f9fa !important;
+            border-right: 2px solid #dee2e6;
+        }
+        
+        .frozen-col:first-child {
+            left: 0;
+            min-width: 140px;
+            z-index: 20;
+        }
+        
+        .frozen-col:nth-child(2) {
+            left: 140px;
+            min-width: 120px;
+            z-index: 20;
+        }
+        
+        tbody .frozen-col {
+            background: white !important;
+        }
+        
+        .vep-header, .vep-col {
+            background: #e3f2fd !important;
+            border-right: 1px solid #bbdefb;
+        }
+
+        .snpeff-header, .snpeff-col {
+            background: #f3e5f5 !important;
+            border-right: 1px solid #ce93d8;
+        }
+
+        tbody .vep-col {
+            background: #f8fcff !important;
+        }
+
+        tbody .snpeff-col {
+            background: #faf9fb !important;
+        }
+
         .igv-container {
             width: 100%;
             min-height: 400px;
@@ -226,12 +267,69 @@
             border-right: 2px solid #e9ecef;
             padding-right: 10px;
         }
+
+        .tooltip-container {
+            position: relative;
+            display: inline-block;
+            margin-left: 5px;
+        }
+
+        .tooltip-icon {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: help;
+            line-height: 14px;
+        }
+
+        .tooltip-text {
+            visibility: hidden;
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            text-align: left;
+            border-radius: 6px;
+            padding: 10px;
+            position: absolute;
+            z-index: 1000;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -125px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.85em;
+            line-height: 1.4;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #2c3e50 transparent transparent transparent;
+        }
+
+        .tooltip-container:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }        
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>EMUMADZ Variant Analysis Viewer</h1>
+            <div id="sampleInfo" style="display:none; margin-top: 10px; font-size: 1.1rem; opacity: 0.9;"></div>
             <button class="btn" id="backToFilesBtn" style="display:none; margin-top: 10px;" onclick="showFileList()">← Back to File Landing Page</button>
         </div>
 
@@ -257,13 +355,17 @@
                 
         <div id="variant-view" style="display: none;">
             <div class="controls">
-                <!-- <button class="btn" onclick="showFileList()" style="margin-right: 10px;">← Back to Files</button> -->
                 <span id="currentFileName" style="font-weight: bold; margin-right: 20px;"></span>
                 
                 <div class="control-group">
-                    <label>Reference Genome:</label>
+                    <label>Reference Genome:
+                        <div class="tooltip-container">
+                            <span class="tooltip-icon">?</span>
+                            <span class="tooltip-text">Select the reference genome assembly for IGV visualization. Different assemblies have different chromosome coordinates and annotations.</span>
+                        </div>
+                    </label>
                     <select id="genomeSelect">
-                        <option value="danRer7">Zebrafish (Zv9)</option>
+                        <option value="danRer7">Zebrafish (danRer7/Zv9)</option>
                         <option value="danRer10">Zebrafish (danRer10)</option>
                         <option value="danRer11">Zebrafish (danRer11)</option>                        
                         <option value="hg38">Human (hg38)</option>
@@ -275,14 +377,24 @@
                 </div>
                 
                 <div class="control-group">
-                    <label>Chromosome:</label>
+                    <label>Chromosome:
+                        <div class="tooltip-container">
+                            <span class="tooltip-icon">?</span>
+                            <span class="tooltip-text">Filter variants by specific chromosome or scaffold. Useful for focusing on particular genomic regions.</span>
+                        </div>
+                    </label>
                     <select id="chromosomeFilter">
                         <option value="">All Chromosomes</option>
                     </select>
                 </div>
                 
                 <div class="control-group">
-                    <label>Impact:</label>
+                    <label>Impact:
+                        <div class="tooltip-container">
+                            <span class="tooltip-icon">?</span>
+                            <span class="tooltip-text">Filter by predicted functional impact:<br>• HIGH: Protein truncating (stop gained, frameshift)<br>• MODERATE: Missense, in-frame indels<br>• LOW: Synonymous variants<br>• MODIFIER: Intronic, intergenic variants</span>
+                        </div>
+                    </label>
                     <select id="impactFilter">
                         <option value="">All Impacts</option>
                         <option value="HIGH">High</option>
@@ -293,17 +405,28 @@
                 </div>
                 
                 <div class="control-group">
-                    <label>Gene:</label>
+                    <label>Gene:
+                        <div class="tooltip-container">
+                            <span class="tooltip-icon">?</span>
+                            <span class="tooltip-text">Search for variants in specific genes. Supports partial matches and searches both VEP and SnpEff gene annotations.</span>
+                        </div>
+                    </label>
                     <input type="text" id="geneFilter" placeholder="Search genes...">
                 </div>
                 
                 <div class="control-group">
-                    <label>Min Depth:</label>
+                    <label>Min Depth:
+                        <div class="tooltip-container">
+                            <span class="tooltip-icon">?</span>
+                            <span class="tooltip-text">Minimum sequencing depth required. Higher depth generally indicates more confident variant calls. Typical thresholds: 10-20x for diploid, 30-50x for high confidence.</span>
+                        </div>
+                    </label>
                     <input type="number" id="depthFilter" min="0" placeholder="0">
                 </div>
                 
                 <button class="btn" onclick="applyFilters()">Apply Filters</button>
                 <button class="btn" onclick="clearFilters()">Clear</button>
+                <button class="btn" id="refreshIGVBtn" onclick="forceIGVRefresh()">Refresh IGV</button>
             </div>
             
             <div class="tabs">
@@ -313,33 +436,71 @@
             </div>
             
             <div id="table-tab" class="tab-content active">
+                <div class="help-section" style="background: #f8f9fa; padding: 20px; margin-bottom: 20px; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <h4 style="margin: 0 0 10px 0; color: #495057;">Sample Analysis Overview</h4>
+                    <p style="margin: 0; color: #6c757d; line-height: 1.5;">
+                        This table displays annotated variants from your sample with both VEP and SnpEff predictions. 
+                        Use the filters above to narrow results by chromosome, impact level, gene name, or sequencing depth. 
+                        Click "IGV" to visualize variants in context with BAM alignments. "Gosling" functionality is currently not enabled. 
+                    </p>
+                </div>                
                 <div class="stats" id="stats"></div>
                 <div class="table-container">
                     <table id="variantTable">
                         <thead>
                             <tr>
-                                <th>Variant ID</th>
-                                <th>Sample</th>
+                                <th class="frozen-col">Variant ID</th>
+                                <th class="frozen-col">Actions</th>
                                 <th>Genotype</th>
                                 <th>Depth</th>
                                 <th>AF</th>
-                                <th class="annotation-group">VEP Gene</th>
-                                <th class="annotation-group">VEP Impact</th>
-                                <th class="annotation-group">VEP Consequence</th>
-                                <th>SnpEff Gene</th>
-                                <th>SnpEff Impact</th>
-                                <th>SnpEff Effect</th>
-                                <th>Actions</th>
+                                <th class="vep-header">VEP Gene</th>
+                                <th class="snpeff-header">SnpEff Gene</th>
+                                <th class="vep-header">VEP Impact</th>
+                                <th class="snpeff-header">SnpEff Impact</th>
+                                <th class="vep-header">VEP Consequence</th>
+                                <th class="snpeff-header">SnpEff Effect</th>
                             </tr>
                         </thead>
                         <tbody id="tableBody">
-                            <tr><td colspan="12" class="loading">Load a JSON file to view variants</td></tr>
+                            <tr><td colspan="11" class="loading">Load a JSON file to view variants</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
             
             <div id="igv-tab" class="tab-content">
+                <div class="help-section" style="background: #f8f9fa; padding: 20px; margin-bottom: 20px; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <h4 style="margin: 0 0 10px 0; color: #495057;">Sample Analysis Overview</h4>
+                    <p style="margin: 0; color: #6c757d; line-height: 1.5;">
+                        Note that the tracks shown may not always appear to conform to your filters for genotype, depth and allele frequency.
+                        This is not an error. The tracks include reads of all quality levels by design to provide the maximum possible level of information.
+                        Clicking on the individual reads will yield more information on mapping quality and other read-specific information. 
+                        Note that reads with low mapping quality or phred score were naturally excluded from the allele frequency calculations, even if they appear on the tracks.
+                    </p>
+                </div>                 
+                <div id="igv-info" style="display:none; background: #f8f9fa; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong id="igv-variant-id"></strong> | <span id="igv-coordinates"></span>
+                            <div style="font-size: 0.9em; color: #6c757d; margin-top: 5px;" id="igv-gene-info"></div>
+                        </div>
+                        <div>
+                            <button class="btn" onclick="fitIGVTracks()" style="font-size: 0.8em; padding: 6px 12px; margin-right: 5px;">Fit Tracks
+                                <div class="tooltip-container" style="display: inline-block; margin-left: 3px;">
+                                    <span class="tooltip-icon" style="font-size: 8px; width: 12px; height: 12px; line-height: 12px;">?</span>
+                                    <span class="tooltip-text">Attempt to resize all tracks to show the full scope of reads and features without scrolling.</span>
+                                </div>
+                            </button>
+                            <button class="btn" onclick="resetIGVTracks()" style="font-size: 0.8em; padding: 6px 12px;">Reset Height
+                                <div class="tooltip-container" style="display: inline-block; margin-left: 3px;">
+                                    <span class="tooltip-icon" style="font-size: 8px; width: 12px; height: 12px; line-height: 12px;">?</span>
+                                    <span class="tooltip-text">Reset all tracks to their default viewing height (250px for BAM, 100px for annotations).</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <div class="igv-container" id="igvDiv"></div>
             </div>
             
@@ -415,6 +576,12 @@
                     variantData = data;
                     filteredData = [...variantData];
                     document.getElementById('currentFileName').textContent = filename;
+                    // Update sample info in header
+                    if (data.length > 0) {
+                        const sampleName = data[0].sample_id || filename.replace('.json', '');
+                        document.getElementById('sampleInfo').textContent = `Sample: ${sampleName}`;
+                        document.getElementById('sampleInfo').style.display = 'block';
+                    }                    
                     showVariantView();
                     populateFilters();
                     updateTable();
@@ -429,6 +596,7 @@
             document.getElementById('file-list-view').style.display = 'block';
             document.getElementById('variant-view').style.display = 'none';
             document.getElementById('backToFilesBtn').style.display = 'none';
+            document.getElementById('sampleInfo').style.display = 'none';
         }
 
         function showVariantView() {
@@ -436,18 +604,371 @@
             document.getElementById('variant-view').style.display = 'block';
             document.getElementById('backToFilesBtn').style.display = 'inline-block';
         }
+
+        // Check if annotation track matches selected genome
+        function checkGenomeAnnotationCompatibility(selectedGenome, genomeConfig) {
+            if (!genomeConfig || !genomeConfig.genome) {
+                return true; // No genome info available, allow track
+            }
+            
+            const annotationGenome = genomeConfig.genome.toLowerCase();
+            const selected = selectedGenome.toLowerCase();
+            
+            // Define compatible genome groups
+            const compatibilityMap = {
+                'danrer7': ['danrer7', 'zv9'],
+                'danrer10': ['danrer10', 'grcz10'],
+                'danrer11': ['danrer11', 'grcz11'],
+                'hg38': ['hg38', 'grch38'],
+                'hg19': ['hg19', 'grch37'],
+                'mm10': ['mm10', 'grcm38'],
+                'dm6': ['dm6', 'bdgp6'],
+                'ce11': ['ce11', 'wbcel235']
+            };
+            
+            // Check if selected genome has a compatibility group
+            const compatibleVersions = compatibilityMap[selected];
+            if (compatibleVersions) {
+                return compatibleVersions.some(version => annotationGenome.includes(version));
+            }
+            console.log(compatibleVersions)
+            // Fallback: check if annotation genome contains selected genome name
+            return annotationGenome.includes(selected) || selected.includes(annotationGenome);
+        }
+
+        // Force IGV refresh function
+        async function forceIGVRefresh() {
+            const selectedGenome = document.getElementById('genomeSelect').value || 'danRer7';
+            const igvDiv = document.getElementById('igvDiv');
+            
+            try {
+                // Show loading overlay
+                igvDiv.insertAdjacentHTML('beforeend', '<div class="loading-overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.9); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center;"><div class="spinner"></div><div style="margin-top: 10px;">Refreshing with genome: ' + selectedGenome + '</div></div>');
+                
+                let trackConfigs = [];
+                let currentLocus = null;
+                
+                // If browser exists, try to preserve tracks and locus
+                if (igvBrowser && igvBrowser.trackViews) {
+                    try {
+                        currentLocus = igvBrowser.currentLoci();
+                        const currentTracks = [...igvBrowser.trackViews];
+                        trackConfigs = currentTracks.map(tv => tv.track.config).filter(config => 
+                            config && !config.isReference && config.type !== 'sequence'
+                        );
+                    } catch (e) {
+                        console.log('Could not store current state:', e);
+                    }
+                }
+                
+                // Force full reload with selected genome
+                igvBrowser = null;
+                igvDiv.innerHTML = '<div class="loading"><div class="spinner"></div>Loading genome: ' + selectedGenome + '</div>';
+                
+                // Initialize with the selected genome
+                await initIGV(selectedGenome);
+                
+                // Wait for browser to be ready
+                let attempts = 0;
+                while ((!igvBrowser || !igvBrowser.genome) && attempts < 30) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    attempts++;
+                }
+                
+                if (igvBrowser && igvBrowser.genome) {
+                    console.log('IGV refreshed with genome:', selectedGenome);
+                    
+                    // Check genome compatibility and show/hide warning
+                    // First ensure genomeConfig is loaded
+                    if (!genomeConfig) {
+                        try {
+                            const genomesResponse = await fetch('/api/genomes');
+                            const genomes = await genomesResponse.json();
+                            genomeConfig = genomes['danRer7'] || genomes[selectedGenome];
+                        } catch (e) {
+                            console.log('Could not fetch genome config for compatibility check');
+                        }
+                    }
+                    
+                    if (genomeConfig && genomeConfig.annotationURL) {
+                        const isCompatible = checkGenomeAnnotationCompatibility(selectedGenome, genomeConfig);
+                        
+                        // Remove any existing warnings
+                        const existingWarning = igvDiv.querySelector('.genome-warning');
+                        if (existingWarning) existingWarning.remove();
+                        
+                        if (!isCompatible) {
+                            const warningDiv = document.createElement('div');
+                            warningDiv.className = 'genome-warning';
+                            warningDiv.innerHTML = `
+                                <div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 10px; margin: 10px 0; border-radius: 4px;">
+                                    <strong>⚠️ Warning:</strong> Gene annotation track may not match the selected genome assembly (${selectedGenome}). 
+                                    Annotation track will be hidden to prevent coordinate misalignment.
+                                </div>
+                            `;
+                            igvDiv.appendChild(warningDiv);
+                        }
+                    }
+                    
+                    // Restore locus - prioritize stored variant coordinates
+                    let locusToRestore = null;
+                    if (igvBrowser && igvBrowser.currentVariant) {
+                        locusToRestore = igvBrowser.currentVariant.locus;
+                    } else if (currentLocus && currentLocus.length > 0) {
+                        locusToRestore = currentLocus[0];
+                    }
+
+                    if (locusToRestore) {
+                        try {
+                            await igvBrowser.search(locusToRestore);
+                            console.log('Restored locus:', locusToRestore);
+                        } catch (e) {
+                            console.log('Could not restore locus (may be incompatible with new genome):', e);
+                        }
+                    }
+                    
+                    // Check GFF compatibility and filter tracks accordingly
+                    const isGffCompatible = genomeConfig && genomeConfig.annotationURL ? 
+                        checkGenomeAnnotationCompatibility(selectedGenome, genomeConfig) : true;
+                    
+                    // Remove any existing warnings
+                    const existingWarning = igvDiv.querySelector('.genome-warning');
+                    if (existingWarning) existingWarning.remove();
+                    
+                    // Show warning if GFF is incompatible
+                    if (genomeConfig && genomeConfig.annotationURL && !isGffCompatible) {
+                        const warningDiv = document.createElement('div');
+                        warningDiv.className = 'genome-warning';
+                        warningDiv.innerHTML = `
+                            <div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 10px; margin: 10px 0; border-radius: 4px;">
+                                <strong>⚠️ Warning:</strong> Custom GFF file is incompatible with ${selectedGenome}. GFF track hidden to prevent coordinate errors.
+                            </div>
+                        `;
+                        igvDiv.appendChild(warningDiv);
+                    }
+                    
+                    // Restore tracks, filtering out incompatible GFF
+                    for (const trackConfig of trackConfigs) {
+                        // Skip GFF tracks if incompatible
+                        if (!isGffCompatible && trackConfig.name && 
+                            (trackConfig.name.includes('GFF') || trackConfig.name.includes('Gene Annotations'))) {
+                            console.log('Skipping incompatible GFF track:', trackConfig.name);
+                            continue;
+                        }
+                        
+                        try {
+                            await igvBrowser.loadTrack(trackConfig);
+                            console.log('Restored track:', trackConfig.name);
+                        } catch (e) {
+                            console.log('Could not restore track:', trackConfig.name, e);
+                        }
+                    }
+                } else {
+                    console.error('Failed to initialize IGV browser');
+                }
+                
+            } catch (error) {
+                console.error('Error during IGV refresh:', error);
+                igvDiv.innerHTML = '<div style="padding: 20px; color: red;">Error refreshing IGV. Check console for details.</div>';
+            } finally {
+                // Clean up any loading indicators
+                setTimeout(() => {
+                    const overlay = igvDiv.querySelector('.loading-overlay');
+                    const loading = igvDiv.querySelector('.loading');
+                    if (overlay) overlay.remove();
+                    if (loading) loading.remove();
+                }, 1000);
+            }
+        }
+
+        // Fit all tracks to optimal height
+        async function fitIGVTracks() {
+            if (!igvBrowser || !igvBrowser.trackViews) return;
+            
+            for (const trackView of igvBrowser.trackViews) {
+                if (trackView.track.type === 'alignment') {
+                    try {
+                        // Method 1: Try to get the alignment container and count actual rendered rows
+                        let visibleRows = 0;
+                        
+                        // Look for the track's viewport div
+                        const viewport = trackView.viewports?.[0] || trackView.$viewport?.[0];
+                        if (viewport) {
+                            // Count rendered alignment rows in the DOM
+                            const renderedAlignments = viewport.querySelectorAll('.alignment, .igv-alignment-row, [class*="alignment"]');
+                            visibleRows = renderedAlignments.length;
+                            console.log(`Found ${visibleRows} rendered alignments in DOM`);
+                        }
+                        
+                        // Method 2: Check track's internal properties
+                        if (visibleRows === 0) {
+                            const trackProps = [
+                                'alignmentRowCount',
+                                'maxRows', 
+                                'nRows',
+                                'displayedAlignmentRows',
+                                'visibleAlignmentCount'
+                            ];
+                            
+                            for (const prop of trackProps) {
+                                if (trackView.track[prop] && trackView.track[prop] > 0) {
+                                    visibleRows = trackView.track[prop];
+                                    console.log(`Using track.${prop}: ${visibleRows}`);
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Method 3: Force track to recalculate by triggering a repaint first
+                        if (visibleRows === 0) {
+                            console.log('No visible rows found, triggering repaint...');
+                            await trackView.repaintViews();
+                            
+                            // Wait a moment for repaint
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                            
+                            // Try counting again
+                            const viewport = trackView.viewports?.[0] || trackView.$viewport?.[0];
+                            if (viewport) {
+                                const renderedAlignments = viewport.querySelectorAll('.alignment, .igv-alignment-row, [class*="alignment"]');
+                                visibleRows = renderedAlignments.length;
+                                console.log(`After repaint: ${visibleRows} alignments`);
+                            }
+                        }
+                        
+                        // Calculate optimal height
+                        const rowHeight = 14; // Standard IGV row height
+                        const headerHeight = 30;
+                        const minHeight = 150;
+                        const maxHeight = 800;
+                        
+                        let optimalHeight;
+                        if (visibleRows > 0) {
+                            optimalHeight = Math.max(minHeight, Math.min(maxHeight, (visibleRows * rowHeight) + headerHeight));
+                            console.log(`Setting BAM track height to ${optimalHeight}px for ${visibleRows} rows`);
+                        } else {
+                            // Fallback: set to a reasonable default
+                            optimalHeight = 300;
+                            console.log('Could not determine row count, using fallback height');
+                        }
+                        
+                        trackView.setTrackHeight(optimalHeight);
+                        
+                    } catch (error) {
+                        console.error('Error fitting alignment track:', error);
+                        trackView.setTrackHeight(300); // Safe fallback
+                    }
+                    
+                } else if (trackView.track.type === 'annotation') {
+                    // For annotation tracks, try to expand to show all features
+                    try {
+                        // Set to expanded mode
+                        if (trackView.track.displayMode !== 'EXPANDED') {
+                            trackView.track.displayMode = 'EXPANDED';
+                        }
+                        
+                        // Set a reasonable height for annotations
+                        trackView.setTrackHeight(150);
+                        await trackView.repaintViews();
+                        
+                    } catch (error) {
+                        console.error('Error fitting annotation track:', error);
+                        trackView.setTrackHeight(120);
+                    }
+                }
+            }
+            
+            // Force IGV to refresh after all changes
+            setTimeout(() => {
+                if (igvBrowser) {
+                    igvBrowser.visibilityChange();
+                }
+            }, 200);
+        }     
+
+        // Reset tracks to default heights
+        function resetIGVTracks() {
+            if (!igvBrowser || !igvBrowser.trackViews) return;
+            
+            igvBrowser.trackViews.forEach(trackView => {
+                if (trackView.track.type === 'alignment') {
+                    // Reset BAM tracks only
+                    trackView.setTrackHeight(250); // Default BAM height
+                    
+                    // Reset max rows if it was modified
+                    if (trackView.track.maxRows) {
+                        trackView.track.maxRows = 500; // IGV default
+                    }
+                    
+                    console.log('Reset BAM track:', trackView.track.name);
+                }
+            });
+        }      
+
         // Reinitialize IGV when genome changes
         document.getElementById('genomeSelect').addEventListener('change', function() {
             const selectedTab = document.querySelector('.tab.active');
             if (selectedTab && selectedTab.textContent.includes('IGV')) {
                 igvBrowser = null;
                 initIGV();
+                
+                // Show genome compatibility warning if needed
+                if (genomeConfig && genomeConfig.annotationURL) {
+                    const selectedGenome = this.value;
+                    const isCompatible = checkGenomeAnnotationCompatibility(selectedGenome, genomeConfig);
+                    
+                    if (!isCompatible) {
+                        const igvDiv = document.getElementById('igvDiv');
+                        const existingWarning = igvDiv.querySelector('.genome-warning');
+                        if (existingWarning) existingWarning.remove();
+                        
+                        const warningDiv = document.createElement('div');
+                        warningDiv.className = 'genome-warning';
+                        warningDiv.innerHTML = `
+                            <div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 10px; margin: 10px 0; border-radius: 4px;">
+                                <strong>⚠️ Warning:</strong> Gene annotation track may not match the selected genome assembly (${selectedGenome}). 
+                                Annotation track will be hidden to prevent coordinate misalignment.
+                            </div>
+                        `;
+                        igvDiv.appendChild(warningDiv);
+                    } else {
+                        // Remove warning if genome is now compatible
+                        const existingWarning = igvDiv.querySelector('.genome-warning');
+                        if (existingWarning) existingWarning.remove();
+                    }
+                }
             }
-        });        
+        });       
         
         function populateFilters() {
-            // Populate chromosome filter
-            const chromosomes = [...new Set(variantData.map(v => v.chromosome))].sort();
+            // Populate chromosome filter with numeric sorting
+            const chromosomes = [...new Set(variantData.map(v => v.chromosome))];
+            
+            // Smart chromosome sorting (numeric for numbers, lexicographic for others)
+            chromosomes.sort((a, b) => {
+                // Remove 'chr' prefix if present for comparison
+                const aNum = a.toString().replace(/^chr/i, '');
+                const bNum = b.toString().replace(/^chr/i, '');
+                
+                // Check if both are numeric
+                const aIsNum = !isNaN(aNum) && !isNaN(parseFloat(aNum));
+                const bIsNum = !isNaN(bNum) && !isNaN(parseFloat(bNum));
+                
+                if (aIsNum && bIsNum) {
+                    // Both numeric - sort numerically
+                    return parseFloat(aNum) - parseFloat(bNum);
+                } else if (aIsNum) {
+                    // a is numeric, b is not - a comes first
+                    return -1;
+                } else if (bIsNum) {
+                    // b is numeric, a is not - b comes first
+                    return 1;
+                } else {
+                    // Both non-numeric - sort lexicographically
+                    return a.localeCompare(b);
+                }
+            });
+            
             const chrSelect = document.getElementById('chromosomeFilter');
             chrSelect.innerHTML = '<option value="">All Chromosomes</option>';
             chromosomes.forEach(chr => {
@@ -488,7 +1009,7 @@
             const tbody = document.getElementById('tableBody');
             
             if (filteredData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="12" class="loading">No variants match current filters</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="loading">No variants match current filters</td></tr>';
                 return;
             }
             
@@ -497,25 +1018,24 @@
                 const snpeffImpactClass = `impact-${(variant.snpeff_impact || '').toLowerCase()}`;
                 return `
                     <tr>
-                        <td><strong>${variant.variant_id}</strong></td>
-                        <td>${variant.sample_id}</td>
+                        <td class="frozen-col"><strong>${variant.variant_id}</strong></td>
+                        <td class="frozen-col">
+                            <button class="btn" style="font-size: 0.7em; padding: 4px 8px; margin-right: 2px;" onclick="viewInIGV('${variant.chromosome}', ${variant.position}, '${variant.sample_id}')">IGV</button>
+                            <button class="btn" style="font-size: 0.7em; padding: 4px 8px;" onclick="viewInGosling('${variant.variant_id}', '${variant.chromosome}', ${variant.position})">Gosling</button>
+                        </td>
                         <td>${variant.genotype}</td>
                         <td>${variant.depth}</td>
                         <td>${variant.allele_freq ? variant.allele_freq.toFixed(2) : '-'}</td>
-                        <td class="annotation-group">${variant.vep_gene || '-'}</td>
-                        <td class="annotation-group">
+                        <td class="vep-col">${variant.vep_gene || '-'}</td>
+                        <td class="snpeff-col">${variant.snpeff_gene || '-'}</td>
+                        <td class="vep-col">
                             ${variant.vep_impact ? `<span style="background-color: ${variant.vep_impact_color}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em;">${variant.vep_impact}</span>` : '-'}
                         </td>
-                        <td class="annotation-group">${variant.vep_consequence || '-'}</td>
-                        <td>${variant.snpeff_gene || '-'}</td>
-                        <td>
+                        <td class="snpeff-col">
                             ${variant.snpeff_impact ? `<span style="background-color: ${variant.snpeff_impact_color}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em;">${variant.snpeff_impact}</span>` : '-'}
                         </td>
-                        <td>${variant.snpeff_effect || '-'}</td>
-                        <td>
-                            <button class="btn" style="font-size: 0.7em; padding: 4px 8px;" onclick="viewInIGV('${variant.chromosome}', ${variant.position}, '${variant.sample_id}')">IGV</button>
-                            <button class="btn" style="font-size: 0.7em; padding: 4px 8px;" onclick="viewInGosling('${variant.variant_id}', '${variant.chromosome}', ${variant.position})">Plot</button>
-                        </td>
+                        <td class="vep-col">${variant.vep_consequence || '-'}</td>
+                        <td class="snpeff-col">${variant.snpeff_effect || '-'}</td>
                     </tr>
                 `;
             }).join('');
@@ -559,7 +1079,7 @@
         }
 
         function setFilterControlsEnabled(enabled) {
-            document.getElementById('genomeSelect').disabled = !enabled;
+            // document.getElementById('genomeSelect').disabled = !enabled;
             document.getElementById('chromosomeFilter').disabled = !enabled;
             document.getElementById('impactFilter').disabled = !enabled;
             document.getElementById('geneFilter').disabled = !enabled;
@@ -576,6 +1096,11 @@
             // Add active class to selected tab and show content
             event.target.classList.add('active');
             document.getElementById(`${tabName}-tab`).style.display = 'block';
+
+            // Hide IGV info when not on IGV tab
+            if (tabName !== 'igv') {
+                document.getElementById('igv-info').style.display = 'none';
+            }
 
             // Enable filters only for the table tab
             setFilterControlsEnabled(tabName === 'table');
@@ -697,17 +1222,50 @@
             // Remove all tracks before loading new ones
             await igvBrowser.removeAllTracks();
 
+            // Store current variant for refresh functionality
+            igvBrowser.currentVariant = {
+                variant_id: variant.variant_id,
+                chromosome: chromosome,
+                position: position,
+                locus: `${chromosome}:${position - windowSize}-${position + windowSize}`,
+                gene_info: `VEP: ${variant.vep_gene || 'N/A'} | SnpEff: ${variant.snpeff_gene || 'N/A'}`
+            };
+
+            // Update info display
+            document.getElementById('igv-variant-id').textContent = variant.variant_id;
+            document.getElementById('igv-coordinates').textContent = `${chromosome}:${position}`;
+            document.getElementById('igv-gene-info').textContent = igvBrowser.currentVariant.gene_info;
+            document.getElementById('igv-info').style.display = 'block';
+
             // Prepare tracks
             const tracks = [];
-            if (genomeConfig.annotationURL) {
-                tracks.push({
-                    name: 'Gene Annotations',
-                    type: 'annotation',
-                    format: genomeConfig.annotationFormat,
-                    url: genomeConfig.annotationURL,
-                    displayMode: 'EXPANDED',
-                    height: 100
-                });
+
+            // Validate custom GFF/annotation track compatibility
+            if (genomeConfig && genomeConfig.annotationURL) {
+                const isGenomeCompatible = checkGenomeAnnotationCompatibility(selectedGenome, genomeConfig);
+                
+                if (isGenomeCompatible) {
+                    tracks.push({
+                        name: 'Custom Gene Annotations (GFF)',
+                        type: 'annotation',
+                        format: genomeConfig.annotationFormat,
+                        url: genomeConfig.annotationURL,
+                        displayMode: 'EXPANDED',
+                        height: 100
+                    });
+                } else {
+                    // Show warning about custom GFF file
+                    const warningDiv = document.createElement('div');
+                    warningDiv.innerHTML = `
+                        <div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 10px; margin: 10px 0; border-radius: 4px;">
+                            <strong>⚠️ Warning:</strong> Custom GFF annotation file may not match the selected genome assembly (${selectedGenome}). 
+                            Custom annotations hidden to prevent coordinate misalignment. RefSeq annotations (if available) will still load.
+                        </div>
+                    `;
+                    document.getElementById('igvDiv').appendChild(warningDiv);
+                    
+                    console.warn(`Custom GFF track skipped - genome mismatch. Selected: ${selectedGenome}, GFF: ${genomeConfig.genome || 'unknown'}`);
+                }
             }
             tracks.push({
                 type: 'annotation',
