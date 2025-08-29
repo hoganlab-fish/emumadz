@@ -402,6 +402,9 @@
 
         <div id="file-list-view">
             <h2 style="text-align:center; margin-top:20px;">File Landing Page</h2>
+                <p>
+                    tyrone: you should get a security warning when accessing the site. You can safely ignore this for now. If you have trouble accessing this site, try opening this in private mode/incognito window, or clearing your browser cache and cookies (though this will log you out of everything).
+                </p>
             <div class="table-container" style="max-height: 400px; overflow-y: auto;">
                 <table id="fileListTable">
                     <thead>
@@ -542,13 +545,24 @@
             
             <div id="igv-tab" class="tab-content">
                 <div class="help-section" style="background: #f8f9fa; padding: 20px; margin-bottom: 20px; border-radius: 8px; border-left: 4px solid #667eea;">
-                    <h4 style="margin: 0 0 10px 0; color: #495057;">Sample Analysis Overview</h4>
+                    <h4 style="margin: 0 0 10px 0; color: #495057;">Important information</h4>
                     <p style="margin: 0; color: #6c757d; line-height: 1.5;">
-                        <strong>Note that the tracks shown may not always appear to conform to your filters for genotype, depth and allele frequency.</strong>
-                        This is not an error. The tracks include reads of all quality levels by design to provide the maximum possible level of information.
-                        Clicking on the individual reads will yield more information on mapping quality and other read-specific information. 
-                        Note that reads with low mapping quality or phred score were naturally excluded from the allele frequency calculations, even if they appear on the tracks.
-                        <span style="color: #ff0000">The custom genome annotation coordinates reflects the zebrafish genome assembly Zv9 only. Newer genome versions are provided for testing purposes only and should not be used for this experiment.</span> Automated checks for annotation file compatibility will be implemented later.
+                        <ul>
+                            <li><span style="color: hsl(220, 100%, 50%)">Note that the tracks shown may not always appear to conform to your filters for genotype, depth and allele frequency.</span></li>
+                            <li>This is not an error. The tracks include reads of all quality levels by design to provide the maximum possible level of information.</li>
+                            <li>Clicking on the individual reads will yield more information on mapping quality and other read-specific information.</li>
+                            <li>Note that reads with low mapping quality or phred score were naturally excluded from the allele frequency calculations, <strong>even if they appear on the tracks.</strong></li>
+                            <span style="color: #ff0000">The custom genome annotation coordinates reflects the zebrafish genome assembly Zv9 only. Newer genome versions are provided for testing purposes only and should not be used for this experiment.</span> Automated checks for annotation file compatibility will be implemented later.
+                            <li>Homozygosity mapping plots are not yet implemented and will arrive in a future update.</li>
+                        </ul>
+                    </p>
+                    <h4 style="margin: 0 0 10px 0; color: #495057;">Troubleshooting</h4>
+                    <p style="margin: 0; color: #6c757d; line-height: 1.5;">
+                        <ul>
+                            <li>If this is blank the first time you click on this IGV browser tab, this is not an error. We first need to initialise IGV by clicking the link in the Variant Table tab.</li>
+                            <li>If anything unexpected happens, refreshing IGV or the site itself may work.</li>
+                            <li>The IGV browser below embeds IGV internally. All features associated with IGV will be the same.</li>
+                        </ul>
                     </p>
                 </div>                 
                 <div id="igv-info" style="display:none; background: #f8f9fa; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid #667eea;">
