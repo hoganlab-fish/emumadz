@@ -40,6 +40,10 @@ def file_list():
 def serve_data(filename):
     return send_from_directory('data', filename)
 
+@app.route('/logos/<filename>')
+def serve_logo(filename):
+    return send_from_directory('logos', filename)
+
 @app.route('/genomes/<path:filename>')
 def serve_genome(filename):
     return send_from_directory('igv-genomes', filename)

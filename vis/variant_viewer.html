@@ -38,7 +38,6 @@
         }
         
         .header h1 {
-            margin: 0;
             font-size: 2.5rem;
             font-weight: 300;
             letter-spacing: 2px;
@@ -353,8 +352,13 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>EMUMADZ Variant Analysis Viewer F0-F2</h1>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <img src="/logos/peter-mac-logo.png" alt="Peter MacCallum Cancer Centre" style="height: 60px; opacity: 0.9;" onerror="this.style.display='none'">
+                <h1 style="margin: 0; font-size: 2.5rem; font-weight: 300; letter-spacing: 2px;">EMUMADZ Variant Analysis Viewer F0-F2</h1>
+                <img src="/logos/unimelb-logo.png" alt="University of Melbourne" style="height: 60px; opacity: 0.9;" onerror="this.style.display='none'">
+            </div>
             <div style="margin-top: 15px; display: flex; justify-content: center; gap: 15px; align-items: center; flex-wrap: wrap;">
+
                 <a href="https://github.com/hoganlab-fish/emumadz" target="_blank" style="color: white; text-decoration: none; display: flex; align-items: center; gap: 5px; opacity: 0.9; transition: opacity 0.3s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.9'">
                     <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
@@ -391,11 +395,6 @@
                     </svg>
                     v1.0.0
                 </a>
-            </div>
-            <!-- Institution logos -->
-            <div style="margin-top: 20px; display: flex; justify-content: center; gap: 30px; align-items: center;">
-                <img src="/logos/peter-mac-logo.png" alt="Peter MacCallum Cancer Centre" style="height: 40px; opacity: 0.8;" onerror="this.style.display='none'">
-                <img src="/logos/unimelb-logo.png" alt="University of Melbourne" style="height: 40px; opacity: 0.8;" onerror="this.style.display='none'">
             </div>
             <div id="sampleInfo" style="display:none; margin-top: 10px; font-size: 1.1rem; opacity: 0.9;"></div>
             <button class="btn" id="backToFilesBtn" style="display:none; margin-top: 10px;" onclick="showFileList()">← Back to File Landing Page</button>
@@ -486,7 +485,7 @@
                     <label>Min Depth:
                         <div class="tooltip-container">
                             <span class="tooltip-icon">?</span>
-                            <span class="tooltip-text">Minimum sequencing depth required. Higher depth generally indicates more confident variant calls. Typical thresholds: 10-20x for diploid, 30-50x for high confidence.</span>
+                            <span class="tooltip-text">Minimum sequencing depth required. Higher depth generally indicates more confident variant calls. Typical thresholds.</span>
                         </div>
                     </label>
                     <input type="number" id="depthFilter" min="0" placeholder="0">
@@ -545,11 +544,11 @@
                 <div class="help-section" style="background: #f8f9fa; padding: 20px; margin-bottom: 20px; border-radius: 8px; border-left: 4px solid #667eea;">
                     <h4 style="margin: 0 0 10px 0; color: #495057;">Sample Analysis Overview</h4>
                     <p style="margin: 0; color: #6c757d; line-height: 1.5;">
-                        Note that the tracks shown may not always appear to conform to your filters for genotype, depth and allele frequency.
+                        <strong>Note that the tracks shown may not always appear to conform to your filters for genotype, depth and allele frequency.</strong>
                         This is not an error. The tracks include reads of all quality levels by design to provide the maximum possible level of information.
                         Clicking on the individual reads will yield more information on mapping quality and other read-specific information. 
                         Note that reads with low mapping quality or phred score were naturally excluded from the allele frequency calculations, even if they appear on the tracks.
-                        <span style="color: #ff0000">The custom genome annotation coordinates reflects the zebrafish genome assembly Zv9 only. Newer genome versions are provided for testing purposes only and should not be used for this experiment. Automated checks for annotation file compatibility will be implemented later.</span>
+                        <span style="color: #ff0000">The custom genome annotation coordinates reflects the zebrafish genome assembly Zv9 only. Newer genome versions are provided for testing purposes only and should not be used for this experiment.</span> Automated checks for annotation file compatibility will be implemented later.
                     </p>
                 </div>                 
                 <div id="igv-info" style="display:none; background: #f8f9fa; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid #667eea;">
