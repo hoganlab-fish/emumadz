@@ -36,6 +36,10 @@ def file_list():
     
     return jsonify(files)
 
+@app.route('/build/<filename>')
+def serve_build(filename):
+    return send_from_directory('build', filename)
+
 @app.route('/data/<filename>')
 def serve_data(filename):
     return send_from_directory('data', filename)
@@ -110,6 +114,7 @@ def igv_proxy(filename):
         return "Proxy error", 500
 
 if __name__ == '__main__':
+    os.makedirs('build', exist_ok=True)
     os.makedirs('data', exist_ok=True)
     os.makedirs('igv-dist', exist_ok=True)
     os.makedirs('igv-genomes/danRer7', exist_ok=True)
