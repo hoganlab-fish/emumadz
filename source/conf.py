@@ -5,6 +5,10 @@
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+import os
+import sys
+sys.path.insert(0, os.path.abspath("../"))
+
 
 project = 'EMUMADZ'
 # Enhanced MUtation MApping and Detection in Zebrafish
@@ -27,8 +31,6 @@ authors = [
 
 def add_orcid(author_name, orcid):
     return f'<a href="https://orcid.org/{orcid}">{author_name} <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, '
-# author = "".join([add_orcid(x, y) for x, y in authors])
-# author = "".join("".join([add_orcid(x, y) for x, y in authors]).rsplit(", ", 1))
 
 # Set author and copyright fields
 author = ",\n".join([x for x, y in authors])
@@ -44,7 +46,8 @@ html_theme_options = {
 
 extensions = [
     'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon'
+    'sphinx.ext.napoleon',
+    'sphinx.ext.viewcode'
     ]
 
 templates_path = ['_templates']

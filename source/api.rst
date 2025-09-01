@@ -1,12 +1,11 @@
-EMUMADZ
-=======
-Enhanced MUtation MApping and Detection in Zebrafish
-----------------------------------------------------
+API Reference
+=============
+
 .. whole_genome_sequencing documentation master file, created by
    sphinx-quickstart on Mon Jun 30 12:23:50 2025.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
-   
+
 .. raw:: html
 
    Copyright © 2025 <a href="https://orcid.org/0000-0002-9207-0385">Tyrone Chen <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, <a href="https://orcid.org/0000-0002-6435-7100">Richard Lupat <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, <a href="https://orcid.org/0009-0005-5595-3882">Michelle Meier <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, <a href="https://orcid.org/0000-0002-6528-891X">Maia Zethoven <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, <a href="https://orcid.org/0000-0002-6130-250X">Greg Baillie <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, <a href="https://orcid.org/0000-0000-0000-0000">Scott Paterson <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, <a href="https://orcid.org/0009-0001-5651-1331">Oguzhan Baltaci <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, <a href="https://orcid.org/0000-0003-3147-8042">Cas Simons <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, <a href="https://orcid.org/0000-0002-1150-3549">Jason Li <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, <a href="https://orcid.org/0000-0002-0651-7065">Benjamin Hogan <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>
@@ -23,34 +22,7 @@ Code in this repository is provided under a `MIT license`_. This documentation i
 
 .. _ben.hogan@petermac.org: mailto:ben.hogan@petermac.org
 
-We thank Tyrone Chen, Richard Lupat and Jason Li from the Bioinformatics Core (RRID: SCR_025901) at the Peter MacCallum Cancer Centre for their contributions to the pipeline.
-
-Contains the documentation for our custom zebrafish whole genome sequencing pipeline.
-
-.. image:: _static/emu.png
-   :alt: emu conducting a symphony of zebrafish with variants
-
-.. toctree::
-   :maxdepth: 3
-   :caption: Contents:
-
-   intro
-   install
-   case_study_1
-   api
-
-Appendix
-========
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Appendix:
-   
-   appendix_internal_ref_only
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+.. automodule:: emumadz.parse_vcf
+    :members:
+    :undoc-members:
+    :show-inheritance:
