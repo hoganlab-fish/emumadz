@@ -55,12 +55,18 @@ Here is the directory structure::
     ├── source/         # Scripts are run from here
     ├── data/           # Input data (BAM files, reference genome, samplesheet)
     └── results/        # All output files organized by processing step
-        ├── 01_variant_calling/
-        ├── 02_chromosome_filtering/
-        ├── 03_chromosome_filtering/
-        ├── 04_mutant_analysis/
-        ├── 05_annotation/
-        └── 06_final_results/
+        ├── 01_variant_called
+        ├── 02_chromosome_filtered
+        ├── 03_stringent_filtered
+        ├── 04_normalised
+        ├── 05_samples_merged
+        ├── 06_snps_filtered
+        ├── 07_mutant_candidates
+        ├── 08_annot_all
+        ├── 08_annot_eff
+        ├── 08_annot_vep
+        ├── 09_finalised
+        └── 10_visualisations
 
 Create a samplesheet with sample identifiers, paths to bam file and the sample type::
 
@@ -736,7 +742,7 @@ Visualising data
 Preparing data for visualisation
 ********************************
 
-The aim is to visualise the tracks containing all reads at each SNP position. Visualising the entire genome is ideal but the size of the alignment data makes this step impractical. Therefore, we subset the ``bam`` alignment files [-5,5] around each SNP for a portable but still informative ``bam`` file. The full ``bam`` file can also be loaded and mounted on a separate volume if needed.Here we parse the final ``vcf`` files into a format suitable for visualisation.
+The aim is to visualise the tracks containing all reads at each SNP position. Visualising the entire genome is ideal but the size of the alignment data makes this step impractical. Therefore, we subset the ``bam`` alignment files for **reads containing the final subset of SNPs only**  for a portable but still informative ``bam`` file. The full ``bam`` file can also be loaded and mounted on a separate volume if needed.Here we parse the final ``vcf`` files into a format suitable for visualisation.
 
 .. hint::
     Skipping ``bam`` file subsetting and inspecting the full file is also valid. However, portability is an on-going issue due to ``bam`` file size (in this case ~10-20GB each).
@@ -754,7 +760,6 @@ The aim is to visualise the tracks containing all reads at each SNP position. Vi
             "${outfile_dir}/${sample}.csv" \
             --subset_path "${outfile_dir}/${sample}" \
             --subset_workers ${THREADS} \
-            --subset_padding 5 \
             --coverage_report "${outfile_dir}/${sample}_coverage.csv" \
             --chrom_mapping ${CHROM_MAP} \
             --force_overwrite
