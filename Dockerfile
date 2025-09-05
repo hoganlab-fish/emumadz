@@ -13,6 +13,9 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     pandas \
     htslib \
     make \
+    wget \
+    curl \
+    unzip \    
     gcc_linux-64 \
     gxx_linux-64 \    
     ensembl-utils \
@@ -48,9 +51,6 @@ SHELL ["conda", "run", "-n", "emumadz", "/bin/bash", "-c"]
 # Install system dependencies needed for GATK and VEP
 RUN apt-get update && \
     apt-get install -y \
-    wget \
-    curl \
-    unzip \
     openjdk-8-jre-headless \
     g++ \
     && rm -rf /var/lib/apt/lists/*
