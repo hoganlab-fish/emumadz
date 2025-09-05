@@ -54,6 +54,18 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
 # Activate the environment
 SHELL ["conda", "run", "-n", "emumadz", "/bin/bash", "-c"]
 
+# Install cpanm first
+RUN curl -L https://cpanmin.us | perl - App::cpanminus
+
+# Install specific Perl modules with required versions
+RUN cpanm --notest --force \
+    Compress::Raw::Zlib@2.201 \
+    Compress::Zlib \
+    IO::Compress::Gzip \
+    Archive::Zip \
+    DBI \
+    JSON
+
 # Install GATK 4.5.0.0 manually
 RUN wget https://github.com/broadinstitute/gatk/releases/download/4.5.0.0/gatk-4.5.0.0.zip \
     && unzip gatk-4.5.0.0.zip \
