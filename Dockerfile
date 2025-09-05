@@ -23,31 +23,16 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     bcftools>=1.19 \
     samtools>=1.19.2 \
     snpeff=5.2 \
-    perl \
-    perl-ensembl-api \
-    perl-ensembl-genomes \
-    perl-ensembl-io \
-    perl-compress-raw-bzip2 \
-    perl-io-compress \
-    perl-scalar-list-utils \    
-    perl-dbi \
-    perl-dbd-mysql \
-    perl-xml-parser \
-    perl-archive-zip \
-    perl-archive-extract \
-    perl-compress-raw-zlib \
-    perl-ensembl-io \
-    perl-file-copy-recursive \
-    perl-module-build \
-    perl-bioperl \
-    perl-bio-db-hts \
-    perl-set-intervaltree \
-    perl-json \
-    perl-perlio-gzip \
-    perl-lwp-simple \
-    perl-http-tiny \
-    perl-list-moreutils \
-    perl-bio-bigfile \
+    perl>=5.22 \
+    perl==5.32.1
+    perl-dbi==1.643
+    perl-archive-zip==1.6.8
+    perl-dbd-mysql==4.050
+    perl-set-intervaltree==0.12
+    perl-json==4.10
+    perl-perlio-gzip==0.20
+    perl-bio-bigfile==1.07
+    perl-list-moreutils==0.430
     htslib \
     && mamba clean -all
 
@@ -58,13 +43,12 @@ SHELL ["conda", "run", "-n", "emumadz", "/bin/bash", "-c"]
 RUN curl -L https://cpanmin.us | perl - App::cpanminus
 
 # Install specific Perl modules with required versions
-RUN cpanm --notest --force \
-    Compress::Raw::Zlib@2.201 \
-    Compress::Zlib \
-    IO::Compress::Gzip \
-    Archive::Zip \
-    DBI \
-    JSON
+RUN cpanm \
+    DBD::mysql \
+    Set::IntervalTree \
+    JSON \
+    PerlIO::gzip \
+    Bio::DB::BigFile
 
 # Install GATK 4.5.0.0 manually
 RUN wget https://github.com/broadinstitute/gatk/releases/download/4.5.0.0/gatk-4.5.0.0.zip \
