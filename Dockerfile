@@ -24,7 +24,7 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     samtools>=1.19.2 \
     snpeff=5.2 \
     perl>=5.22 \
-    perl==5.32.1
+    perl==5.32.1 \
     perl-dbi==1.643 \
     perl-archive-zip==1.6.8 \
     perl-dbd-mysql==4.050 \
