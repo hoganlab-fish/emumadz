@@ -8,8 +8,8 @@ ENV VEP_VERSION=109.3
 WORKDIR /app
 
 # Create conda environment with specified packages
-RUN mamba create -n emumadz -c conda-forge -c bioconda -c defaults \
-    python=3.13.3 \
+RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
+    python \
     pandas=2.3.0 \
     pysam=0.16.0 \
     bcftools=1.19 \
