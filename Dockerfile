@@ -43,17 +43,11 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     perl-list-moreutils \
     perl-bio-bigfile \
     htslib \
+    java-1.8.0-openjdk-headless-cos7-s390x \
     && mamba clean -all
 
 # Activate the environment
 SHELL ["conda", "run", "-n", "emumadz", "/bin/bash", "-c"]
-
-# Install system dependencies needed for GATK and VEP
-RUN apt-get update && \
-    apt-get install -y \
-    openjdk-8-jre-headless \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
 
 # Install GATK 4.5.0.0 manually
 RUN wget https://github.com/broadinstitute/gatk/releases/download/4.5.0.0/gatk-4.5.0.0.zip \
