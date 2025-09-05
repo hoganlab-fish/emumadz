@@ -29,7 +29,6 @@ SHELL ["conda", "run", "-n", "emumadz", "/bin/bash", "-c"]
 
 # Install system dependencies needed for GATK and VEP
 RUN apt-get update && \
-    apt-get install -y software-properties-common && \
     add-apt-repository universe && \
     apt-get update && \
     apt-get install -y \
@@ -37,7 +36,6 @@ RUN apt-get update && \
     curl \
     unzip \
     openjdk-8-jre-headless \
-    perl \
     gcc \
     g++ \
     make \
