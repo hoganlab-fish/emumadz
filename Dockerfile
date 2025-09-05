@@ -29,8 +29,6 @@ SHELL ["conda", "run", "-n", "emumadz", "/bin/bash", "-c"]
 
 # Install system dependencies needed for GATK and VEP
 RUN apt-get update && \
-    add-apt-repository universe && \
-    apt-get update && \
     apt-get install -y \
     wget \
     curl \
