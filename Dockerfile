@@ -43,7 +43,7 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     perl-list-moreutils \
     perl-bio-bigfile \
     htslib \
-    java-1.8.0-openjdk-headless-cos7-s390x \
+    anaconda::java-1.8.0-openjdk-headless-cos7-s390x \
     && mamba clean -all
 
 # Activate the environment
