@@ -15,6 +15,7 @@ RUN apt-get update --fix-missing || apt-get update && \
     unzip \
     default-jre \
     perl \
+    cpanminus \
     build-essential \
     libbz2-dev \
     liblzma-dev \
@@ -29,7 +30,6 @@ RUN apt-get update --fix-missing || apt-get update && \
 
 # Create conda environment with specified packages
 RUN mamba create -n emumadz -c conda-forge -c bioconda -c defaults \
-    cpanminus \
     python \
     pandas==2.3.0 \
     pysam \
