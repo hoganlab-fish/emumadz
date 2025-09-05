@@ -1,9 +1,4 @@
 FROM ubuntu:20.04
-# Then install conda/mamba manually
-RUN wget -O ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
-    bash ~/miniconda.sh -b -p ~/miniconda && \
-    rm ~/miniconda.sh
-ENV PATH="~/miniconda/bin:$PATH"
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -34,6 +29,17 @@ RUN apt-get update && \
     libdbi-perl \
     libdbd-mysql-perl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install miniconda
+RUN wget -O /tmp/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+    bash /tmp/miniconda.sh -b -p /opt/miniconda && \
+    rm /tmp/miniconda.sh
+
+# Add conda to PATH
+ENV PATH="/opt/miniconda/bin:$PATH"
+
+# Install mamba
+RUN conda install -c conda-forge mamba -y
 
 # Create conda environment with specified packages
 RUN mamba create -n emumadz -c conda-forge -c bioconda -c defaults \
