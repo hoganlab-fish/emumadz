@@ -8,13 +8,13 @@ ENV VEP_VERSION=109.3
 WORKDIR /app
 
 # Update system and install basic dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update --fix-missing || apt-get update && \
+    apt-get install -y --no-install-recommends \
     wget \
     curl \
     unzip \
     default-jre \
     perl \
-    cpanminus \
     build-essential \
     libbz2-dev \
     liblzma-dev \
@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y \
 
 # Create conda environment with specified packages
 RUN mamba create -n emumadz -c conda-forge -c bioconda -c defaults \
+    cpanminus \
     python \
     pandas==2.3.0 \
     pysam \
