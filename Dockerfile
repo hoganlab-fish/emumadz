@@ -9,6 +9,7 @@ WORKDIR /app
 
 # Create conda environment with specified packages
 RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
+    openjdk=8 \
     python \
     pandas \
     pysam>=0.16.0 \
