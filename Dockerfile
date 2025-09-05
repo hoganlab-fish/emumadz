@@ -24,7 +24,9 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     samtools>=1.19.2 \
     snpeff=5.2 \
     perl \
-    perl-bio-ensembl \
+    perl-ensembl-api \
+    perl-ensembl-genomes \
+    perl-ensembl-io \
     perl-compress-raw-bzip2 \
     perl-io-compress \
     perl-scalar-list-utils \    
