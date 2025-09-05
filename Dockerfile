@@ -7,31 +7,15 @@ ENV VEP_VERSION=109.3
 # Set working directory
 WORKDIR /app
 
-# Update system and install basic dependencies
-RUN apt-get update && \
-    apt-get install -y software-properties-common && \
-    apt-get update && \
-    apt-get install -y \
+# Update and install absolutely essential packages only
+RUN apt-get update && apt-get install -y \
     wget \
     curl \
-    unzip \
-    default-jre \
-    perl \
-    cpanminus \
-    build-essential \
-    libbz2-dev \
-    liblzma-dev \
-    zlib1g-dev \
-    libcurl4-openssl-dev \
-    libssl-dev \
-    libexpat1-dev \
-    libxml-parser-perl \
-    libdbi-perl \
-    libdbd-mysql-perl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install miniconda
-RUN wget -O /tmp/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
     bash /tmp/miniconda.sh -b -p /opt/miniconda && \
     rm /tmp/miniconda.sh
 
@@ -49,19 +33,7 @@ RUN mamba create -n emumadz -c conda-forge -c bioconda -c defaults \
     bcftools==1.19 \
     samtools==1.19.2 \
     snpeff==5.2 \
-    && mamba clean -all
-
-# Activate the environment
-SHELL ["conda", "run", "-n", "emumadz", "/bin/bash", "-c"]
-
-# Install GATK 4.5.0.0 manually
-RUN wget https://github.com/broadinstitute/gatk/releases/download/4.5.0.0/gatk-4.5.0.0.zip \
-    && unzip gatk-4.5.0.0.zip \
-    && mv gatk-4.5.0.0 /opt/gatk \
-    && rm gatk-4.5.0.0.zip
-
-# Install Perl dependencies via conda
-RUN mamba install -n emumadz -c conda-forge -c bioconda \
+    perl \
     perl-dbi \
     perl-dbd-mysql \
     perl-xml-parser \
@@ -74,8 +46,17 @@ RUN mamba install -n emumadz -c conda-forge -c bioconda \
     perl-bio-db-hts \
     perl-set-intervaltree \
     perl-json \
-    perl-perlio-gzip \
+    perl-perlio-gzip \    
     && mamba clean -all
+
+# Activate the environment
+SHELL ["conda", "run", "-n", "emumadz", "/bin/bash", "-c"]
+
+# Install GATK 4.5.0.0 manually
+RUN wget https://github.com/broadinstitute/gatk/releases/download/4.5.0.0/gatk-4.5.0.0.zip \
+    && unzip gatk-4.5.0.0.zip \
+    && mv gatk-4.5.0.0 /opt/gatk \
+    && rm gatk-4.5.0.0.zip
 
 # Download and install VEP
 RUN wget https://github.com/Ensembl/ensembl-vep/archive/release/${VEP_VERSION}.tar.gz && \
@@ -97,7 +78,6 @@ RUN samtools --version 2>&1 || echo "samtools version failed"
 RUN gatk --version 2>&1 || echo "GATK version failed"
 RUN snpEff -version 2>&1 || echo "snpEff version failed"
 RUN vep --help 2>&1 | head -5 || echo "VEP help failed"
-
 RUN python -c "import pysam; print(f'pysam version: {pysam.__version__}')"
 RUN python -c "import pandas; print(f'pandas version: {pandas.__version__}')"
 
