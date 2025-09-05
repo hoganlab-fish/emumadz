@@ -22,8 +22,9 @@ RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.s
 # Add conda to PATH
 ENV PATH="/opt/miniconda/bin:$PATH"
 
-# Install mamba
-RUN conda install -c conda-forge mamba -y
+# Accept terms of service and install mamba
+RUN conda config --set channel_priority strict && \
+    echo "yes" | conda install -c conda-forge mamba -y
 
 # Create conda environment with specified packages
 RUN mamba create -n emumadz -c conda-forge -c bioconda -c defaults \
