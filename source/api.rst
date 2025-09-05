@@ -1,6 +1,17 @@
 API Reference
 =============
 
+|docker| |build| |pulls|
+
+.. |docker| image:: https://img.shields.io/docker/v/tyronechen/emumadz?label=Docker&logo=docker
+   :target: https://hub.docker.com/r/tyronechen/emumadz
+
+.. |build| image:: https://github.com/hoganlab-fish/emumadz/actions/workflows/docker.yml/badge.svg
+   :target: https://github.com/hoganlab-fish/emumadz/actions/workflows/docker.yml
+
+.. |pulls| image:: https://img.shields.io/docker/pulls/tyronechen/emumadz
+   :target: https://hub.docker.com/r/tyronechen/emumadz
+
 .. whole_genome_sequencing documentation master file, created by
    sphinx-quickstart on Mon Jun 30 12:23:50 2025.
    You can adapt this file completely to your liking, but it should at least

@@ -1,11 +1,5 @@
 [![](https://flat.badgen.net/badge/license/MIT/cyan?scale=1.5)](https://opensource.org/licenses/MIT)
-[![Docker Image](https://img.shields.io/docker/v/tyronechen/emumadz?label=Docker&logo=docker)](https://hub.docker.com/r/tyronechen/emumadz)
-<!-- Build status -->
-[![Build](https://github.com/hoganlab-fish/emumadz/actions/workflows/docker.yml/badge.svg)](https://github.com/hoganlab-fish/emumadz/actions/workflows/docker.yml)
-<!-- Docker pulls -->
-[![Docker Pulls](https://img.shields.io/docker/pulls/tyronechen/emumadz)](https://hub.docker.com/r/tyronechen/emumadz)
-<!-- Image size -->
-[![Docker Image Size](https://img.shields.io/docker/image-size/tyronechen/emumadz)](https://hub.docker.com/r/tyronechen/emumadz)
+[![Docker Image](https://img.shields.io/docker/v/tyronechen/emumadz?label=Docker&logo=docker)](https://hub.docker.com/r/tyronechen/emumadz) [![Build](https://github.com/hoganlab-fish/emumadz/actions/workflows/docker.yml/badge.svg)](https://github.com/hoganlab-fish/emumadz/actions/workflows/docker.yml) [![Docker Pulls](https://img.shields.io/docker/pulls/tyronechen/emumadz)](https://hub.docker.com/r/tyronechen/emumadz) [![Docker Image Size](https://img.shields.io/docker/image-size/tyronechen/emumadz)](https://hub.docker.com/r/tyronechen/emumadz)
 
 # README
 

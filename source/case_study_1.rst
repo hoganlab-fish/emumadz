@@ -1,5 +1,17 @@
 EMUMADZ pipeline case study 1
 =============================
+
+|docker| |build| |pulls|
+
+.. |docker| image:: https://img.shields.io/docker/v/tyronechen/emumadz?label=Docker&logo=docker
+   :target: https://hub.docker.com/r/tyronechen/emumadz
+
+.. |build| image:: https://github.com/hoganlab-fish/emumadz/actions/workflows/docker.yml/badge.svg
+   :target: https://github.com/hoganlab-fish/emumadz/actions/workflows/docker.yml
+
+.. |pulls| image:: https://img.shields.io/docker/pulls/tyronechen/emumadz
+   :target: https://hub.docker.com/r/tyronechen/emumadz
+
 BAM to SNP for F0-F2 comparisons
 --------------------------------
 
