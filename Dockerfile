@@ -44,6 +44,9 @@ RUN curl -L https://cpanmin.us | perl - App::cpanminus
 
 # Install specific Perl modules with required versions
 RUN cpanm \
+    Digest::SHA1 \
+    Bio::DB::GenBank \
+    Cache::FileCache \
     Bio::EnsEMBL::Registry \
     Bio::Perl \
     Set::IntervalTree \
