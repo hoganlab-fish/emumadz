@@ -45,7 +45,7 @@ RUN curl -L https://cpanmin.us | perl - App::cpanminus
 # Install specific Perl modules with required versions
 RUN cpanm \
     Bio::EnsEMBL::Registry \
-    Bio::EnsEMBL::Variation \
+    Bio::Perl \
     Set::IntervalTree \
     JSON \
     PerlIO::gzip \
