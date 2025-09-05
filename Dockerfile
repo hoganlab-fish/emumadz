@@ -9,7 +9,6 @@ WORKDIR /app
 
 # Create conda environment with specified packages
 RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
-    openjdk=8 \
     python \
     pandas \
     pysam>=0.16.0 \
@@ -29,12 +28,19 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
 SHELL ["conda", "run", "-n", "emumadz", "/bin/bash", "-c"]
 
 # Install system dependencies needed for GATK and VEP
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    add-apt-repository universe && \
+    apt-get update && \
+    apt-get install -y \
     wget \
     curl \
     unzip \
-    default-jre \
-    build-essential \
+    openjdk-8-jre-headless \
+    perl \
+    gcc \
+    g++ \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GATK 4.5.0.0 manually
