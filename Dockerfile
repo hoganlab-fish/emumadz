@@ -12,6 +12,9 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     python \
     pandas \
     htslib \
+    make \
+    gcc_linux-64 \
+    gxx_linux-64 \    
     ensembl-utils \
     pysam>=0.16.0 \
     bcftools>=1.19 \
@@ -34,6 +37,8 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     perl-perlio-gzip \
     perl-lwp-simple \
     perl-http-tiny \
+    perl-list-moreutils \
+    perl-bio-bigfile \
     htslib \
     && mamba clean -all
 
@@ -47,9 +52,7 @@ RUN apt-get update && \
     curl \
     unzip \
     openjdk-8-jre-headless \
-    gcc \
     g++ \
-    make \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GATK 4.5.0.0 manually
