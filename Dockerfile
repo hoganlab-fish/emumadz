@@ -10,10 +10,10 @@ WORKDIR /app
 # Create conda environment with specified packages
 RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     python \
-    pandas=2.3.0 \
-    pysam=0.16.0 \
-    bcftools=1.19 \
-    samtools=1.19.2 \
+    pandas \
+    pysam>=0.16.0 \
+    bcftools>=1.19 \
+    samtools>=1.19.2 \
     snpeff=5.2 \
     perl \
     perl-dbi \
