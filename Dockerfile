@@ -43,7 +43,6 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     perl-list-moreutils \
     perl-bio-bigfile \
     htslib \
-    openjdk=8 \
     && mamba clean -all
 
 # Activate the environment
