@@ -11,6 +11,8 @@ WORKDIR /app
 RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     python \
     pandas \
+    htslib \
+    ensembl-utils \
     pysam>=0.16.0 \
     bcftools>=1.19 \
     samtools>=1.19.2 \
@@ -22,6 +24,7 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     perl-archive-zip \
     perl-archive-extract \
     perl-compress-raw-zlib \
+    perl-ensembl-io \
     perl-file-copy-recursive \
     perl-module-build \
     perl-bioperl \
