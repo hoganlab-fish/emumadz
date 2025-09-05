@@ -24,15 +24,14 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     samtools>=1.19.2 \
     snpeff=5.2 \
     perl>=5.22 \
-    perl==5.32.1 \
-    perl-dbi==1.643 \
-    perl-archive-zip==1.6.8 \
-    perl-dbd-mysql==4.050 \
-    perl-set-intervaltree==0.12 \
-    perl-json==4.10 \
-    perl-perlio-gzip==0.20 \
-    perl-bio-bigfile==1.07 \
-    perl-list-moreutils==0.430 \
+    perl-dbi>=1.643 \
+    perl-archive-zip>=1.6.8 \
+    perl-dbd-mysql>=4.050 \
+    perl-set-intervaltree>=0.12 \
+    perl-json>=4.10 \
+    perl-perlio-gzip>=0.20 \
+    perl-bio-bigfile>=1.07 \
+    perl-list-moreutils>=0.430 \
     htslib \
     && mamba clean -all
 
