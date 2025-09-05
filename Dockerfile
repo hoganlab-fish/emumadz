@@ -17,11 +17,21 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     snpeff=5.2 \
     perl \
     perl-dbi \
+    perl-dbd-mysql \
     perl-xml-parser \
     perl-archive-zip \
+    perl-archive-extract \
+    perl-compress-raw-zlib \
+    perl-file-copy-recursive \
+    perl-module-build \
+    perl-bioperl \
+    perl-bio-db-hts \
+    perl-set-intervaltree \
     perl-json \
     perl-perlio-gzip \
-    perl-set-intervaltree \    
+    perl-lwp-simple \
+    perl-http-tiny \
+    htslib \
     && mamba clean -all
 
 # Activate the environment
