@@ -1,4 +1,9 @@
-FROM condaforge/mambaforge:latest
+FROM ubuntu:20.04
+# Then install conda/mamba manually
+RUN wget -O ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+    bash ~/miniconda.sh -b -p ~/miniconda && \
+    rm ~/miniconda.sh
+ENV PATH="~/miniconda/bin:$PATH"
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -8,8 +13,10 @@ ENV VEP_VERSION=109.3
 WORKDIR /app
 
 # Update system and install basic dependencies
-RUN apt-get update --fix-missing || apt-get update && \
-    apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    apt-get update && \
+    apt-get install -y \
     wget \
     curl \
     unzip \
