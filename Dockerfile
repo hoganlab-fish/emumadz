@@ -33,6 +33,7 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     perl-bio-bigfile>=1.07 \
     perl-list-moreutils>=0.430 \
     htslib \
+    mysql-connector-c \
     && mamba clean -all
 
 # Activate the environment
