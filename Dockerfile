@@ -43,9 +43,10 @@ SHELL ["conda", "run", "-n", "emumadz", "/bin/bash", "-c"]
 RUN curl -L https://cpanmin.us | perl - App::cpanminus
 
 # Install specific Perl modules with required versions
-RUN cpanm \
+RUN cpanm --mirror http://cpan.cpan.org \
     Digest::SHA1 \
     Bio::DB::GenBank \
+    Bio::DB::GenPept \
     Cache::FileCache \
     Bio::EnsEMBL::Registry \
     Bio::Perl \
