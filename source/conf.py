@@ -46,6 +46,7 @@ html_theme_options = {
 
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.imgconverter',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode'
     ]
