@@ -411,13 +411,15 @@
                         <tr>
                             <th class="frozen-col">Sample Name</th>
                             <th class="frozen-col">Action</th>
+                            <th>Sample ID</th>
+                            <th>Lab ID</th>
                             <th>File Name</th>
                             <th>Size</th>
                             <th>Modified</th>
                         </tr>
                     </thead>
                     <tbody id="fileListBody">
-                        <tr><td colspan="5" class="loading">Loading available files...</td></tr>
+                        <tr><td colspan="7" class="loading">Loading available files...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -625,7 +627,7 @@
             const tbody = document.getElementById('fileListBody');
             
             if (fileList.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="loading">No JSON files found in data directory</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="loading">No JSON files found in data directory</td></tr>';
                 return;
             }
 
@@ -637,8 +639,12 @@
             });
 
             tbody.innerHTML = sortedFiles.map(file => {
-                // Extract sample name from filename (remove .json extension and clean up)
-                const sampleName = file.name.replace('.json', '');
+                // Extract sample ID from filename (remove .json extension and clean up)
+                const sampleId = file.name.replace('.json', '');
+                
+                // Generate sample name by taking everything after the first "-"
+                const dashIndex = sampleId.indexOf('-');
+                const sampleName = dashIndex !== -1 ? sampleId.substring(dashIndex + 1) : '';
                 
                 return `
                     <tr>
@@ -646,6 +652,8 @@
                         <td class="frozen-col">
                             <button class="btn" style="font-size: 0.8em; padding: 6px 12px;" onclick="loadVariantFile('${file.name}')">Load</button>
                         </td>
+                        <td><strong>${sampleId}</strong></td>
+                        <td></td>
                         <td>${file.name}</td>
                         <td>${formatFileSize(file.size || 0)}</td>
                         <td>${file.modified ? new Date(file.modified).toLocaleString() : '-'}</td>
