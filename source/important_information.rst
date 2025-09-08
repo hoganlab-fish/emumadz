@@ -1,6 +1,36 @@
 Important information
 =====================
 
+.. raw:: html
+
+   <a href="https://opensource.org/licenses/MIT">
+       <img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="MIT License">
+   </a>
+
+   <a href="https://creativecommons.org/licenses/by/4.0/">
+       <img src="https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg?style=for-the-badge" alt="CC BY 4.0">
+   </a>
+
+   <a href="https://github.com/hoganlab-fish/emumadz">
+       <img src="https://img.shields.io/badge/GitHub-hoganlab--fish%2Femumadz-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
+   </a>
+
+   <a href="https://hub.docker.com/r/tyronechen/emumadz">
+       <img src="https://img.shields.io/badge/Docker-tyronechen%2Femumadz-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
+   </a>
+
+   <a href="https://github.com/hoganlab-fish/emumadz/actions/workflows/docker.yml">
+       <img src="https://img.shields.io/github/actions/workflow/status/hoganlab-fish/emumadz/docker.yml?style=for-the-badge&logo=github-actions&logoColor=white" alt="Build Status">
+   </a>
+
+   <a href="https://hub.docker.com/r/tyronechen/emumadz">
+       <img src="https://img.shields.io/docker/pulls/tyronechen/emumadz?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Pulls">
+   </a>
+
+   <a href="https://biomedicalsciences.unimelb.edu.au/sbs-research-groups/anatomy-and-physiology-research/stem-cell-and-developmental-biology/hogan-laboratory-vascular-developmental-genetics-and-cell-biology">
+       <img src="https://img.shields.io/badge/Website-hoganlab-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white" alt="Website">
+   </a>
+   
 .. whole_genome_sequencing documentation master file, created by
    sphinx-quickstart on Mon Jun 30 12:23:50 2025.
    You can adapt this file completely to your liking, but it should at least
