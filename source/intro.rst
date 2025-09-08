@@ -15,16 +15,16 @@ Introduction
        <img src="https://img.shields.io/badge/GitHub-hoganlab--fish%2Femumadz-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
    </a>
 
-   <a href="https://hub.docker.com/r/tyronechen/emumadz">
-       <img src="https://img.shields.io/badge/Docker-tyronechen%2Femumadz-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
+   <a href="https://hub.docker.com/r/tyronechen/pysam_pandas">
+       <img src="https://img.shields.io/badge/Docker-tyronechen%pysam_pandas-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
    </a>
 
    <a href="https://github.com/hoganlab-fish/emumadz/actions/workflows/docker.yml">
        <img src="https://img.shields.io/github/actions/workflow/status/hoganlab-fish/emumadz/docker.yml?style=for-the-badge&logo=github-actions&logoColor=white" alt="Build Status">
    </a>
 
-   <a href="https://hub.docker.com/r/tyronechen/emumadz">
-       <img src="https://img.shields.io/docker/pulls/tyronechen/emumadz?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Pulls">
+   <a href="https://hub.docker.com/r/tyronechen/pysam_pandas">
+       <img src="https://img.shields.io/docker/pulls/tyronechen/pysam_pandas?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Pulls">
    </a>
 
    <a href="https://biomedicalsciences.unimelb.edu.au/sbs-research-groups/anatomy-and-physiology-research/stem-cell-and-developmental-biology/hogan-laboratory-vascular-developmental-genetics-and-cell-biology">
