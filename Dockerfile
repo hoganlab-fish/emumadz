@@ -145,8 +145,8 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     libiconv=1.18=h4ce23a2_1 \
     libjpeg-turbo=3.1.0=hb9d3cd8_0 \
     liblapack=3.9.0=31_h7ac8fdf_openblas \
-    liblzma=5.8.1=hb9d3cd8_0 \
-    liblzma-devel=5.8.1=hb9d3cd8_0 \
+    liblzma \
+    liblzma-devel \
     libnghttp2=1.58.0=h47da74e_1 \
     libnsl=2.0.1=hd590300_0 \
     libntlm=1.8=hb9d3cd8_0 \
@@ -326,7 +326,7 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     pygments=2.17.2=pyhd8ed1ab_0 \
     pyjwt=2.8.0=pyhd8ed1ab_1 \
     pynacl=1.5.0=py37h540881e_1 \
-    pysam=0.16.0=py37ha9a96c6_0 \
+    pysam \
     pysocks=1.7.1=py37h89c1867_5 \
     python=3.7.12=hf930737_100_cpython \
     python-dateutil=2.9.0=pyhd8ed1ab_0 \
@@ -384,9 +384,9 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     xorg-renderproto=0.11.1=hb9d3cd8_1003 \
     xorg-xextproto=7.3.0=hb9d3cd8_1004 \
     xorg-xproto=7.0.31=hb9d3cd8_1008 \
-    xz=5.2.6=h166bdaf_0 \
-    xz-gpl-tools=5.8.1=hbcc6ac9_0 \
-    xz-tools=5.8.1=hb9d3cd8_0 \
+    xz \
+    xz-gpl-tools \
+    xz-tools \
     yaml=0.2.5=h7f98852_2 \
     yq=3.4.3=pyhd8ed1ab_0 \
     zipp=3.15.0=pyhd8ed1ab_0 \
