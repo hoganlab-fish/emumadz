@@ -49,6 +49,7 @@ RUN mamba create -n emumadz -c bioconda -c conda-forge -c defaults \
     babel \
     backports \
     backports.functools_lru_cache \
+    bcftools \
     bcrypt \
     billiard \
     binutils_impl_linux-64 \
@@ -426,6 +427,11 @@ RUN wget https://github.com/Ensembl/ensembl-vep/archive/release/${VEP_VERSION}.t
     perl INSTALL.pl --NO_UPDATE --NO_HTSLIB --NO_TEST && \
     cd .. && \
     rm -rf ${VEP_VERSION}.tar.gz
+
+RUN wget 'https://ftp.ensembl.org/pub/release-79/variation/VEP/danio_rerio_merged_vep_79_Zv9.tar.gz' && \
+    tar -xzvf danio_rerio_merged_vep_79_Zv9.tar.gz && \
+    mkdir ~/.vep && \
+    mv danio_rerio_merged ~/.vep/danio_rerio
 
 # Make conda environment the default and add tools to PATH
 RUN echo "conda activate emumadz" >> ~/.bashrc
