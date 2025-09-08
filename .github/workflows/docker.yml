@@ -19,6 +19,6 @@ jobs:
         with:
           platforms: linux/amd64
           push: true
-          tags: tyronechen/emumadz:latest
+          tags: tyronechen/pysam_pandas:latest
           build-args: |
             DEBIAN_FRONTEND=noninteractive
