@@ -39,8 +39,8 @@ We thank Tyrone Chen, Richard Lupat and Jason Li from the Bioinformatics Core (R
 
 Contains the documentation for our custom zebrafish whole genome sequencing pipeline.
 
-.. image:: _static/emu.png
-   :alt: emu conducting a symphony of zebrafish with variants
+.. .. image:: _static/emu.png
+..    :alt: emu conducting a symphony of zebrafish with variants
 
 .. toctree::
    :maxdepth: 3
