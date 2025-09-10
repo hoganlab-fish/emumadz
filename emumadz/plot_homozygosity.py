@@ -9,11 +9,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import partial
 from multiprocessing import Pool
-from typing import Dict, List, Tuple, Iterator
+from typing import Dict, List, Tuple
 import pandas as pd
 import pysam
 from tqdm import tqdm
-
 
 @dataclass
 class VariantData:
@@ -343,37 +342,7 @@ class HomozygosityAnalyser:
         
         return variants_df, windowed_df
 
-    def process_vcf_streaming(self, vcf_path: str, all_variants: bool = True) -> Iterator[Dict]:
-        """Stream variants with scores without loading all into memory"""
-        sample_name, ref_samples = self._infer_samples(vcf_path)
-        self._validate_samples(vcf_path, sample_name, ref_samples)
-        self._count_vcf_records(vcf_path)
-
-        with pysam.VariantFile(vcf_path) as vcf:
-            for record in tqdm(vcf, total=self.total, desc="Calculating scores"):
-                variant = VariantData(
-                    chrom=record.chrom,
-                    pos=record.pos,
-                    ref=record.ref,
-                    alts=[str(alt) for alt in record.alts] if record.alts else [],
-                    is_snp=(len(record.ref) == 1 and 
-                           all(len(str(alt)) == 1 for alt in record.alts if alt is not None))
-                )
-                
-                if not all_variants and not variant.is_snp:
-                    continue
-                
-                score = self.scorer.calculate_score(record, variant, sample_name, ref_samples)
-                
-                if score > 0:
-                    yield {
-                        'chrom': variant.chrom,
-                        'pos': variant.pos,
-                        'score': score,
-                        'is_snp': variant.is_snp
-                    }
-
-    def process_vcf_parallel(self, vcf_path: str, all_variants: bool = True, ncpu: int = 1) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+    def process_vcf(self, vcf_path: str, all_variants: bool = True, ncpu: int = 1) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
         """Process VCF with parallel chromosome processing"""
         sample_name, ref_samples = self._infer_samples(vcf_path)
         chroms = self._get_chromosomes(vcf_path)
@@ -410,36 +379,6 @@ class HomozygosityAnalyser:
         
         return combined_variants, combined_windows, sample_name
 
-
-    def process_vcf(self, vcf_path: str, all_variants: bool = True, ncpu: int = 1) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
-        """Process VCF file - choose parallel or sequential"""
-        if ncpu > 1:
-            return self.process_vcf_parallel(vcf_path, all_variants, ncpu)
-        else:
-            sample_name, ref_samples = self._infer_samples(vcf_path)
-
-            print(f"Processing VCF: {vcf_path}")
-            print(f"Sample: {sample_name}")
-            print(f"References: {ref_samples}")
-            print(f"Scorer: {self.scorer.get_name()}")
-            
-            # Stream and collect variants
-            variant_scores = [_ for _ in self.process_vcf_streaming(vcf_path, all_variants)]
-            
-            if not variant_scores:
-                print("No variants with homozygosity scores found")
-                return pd.DataFrame(), pd.DataFrame()
-            
-            # Convert to DataFrame and deduplicate
-            variants_df = pd.DataFrame(variant_scores)
-            variants_df = variants_df.groupby(['chrom', 'pos'], as_index=False)['score'].max()
-            print(f"Found {len(variants_df)} variants with homozygosity scores")
-            
-            # Generate windowed analysis
-            windowed_df = self._generate_windows(variants_df)
-            
-            return variants_df, windowed_df, sample_name
-
     def _validate_samples(self, vcf_path: str, sample_name: str, ref_samples: List[str]) -> None:
         """Validate sample names exist in VCF"""
         with pysam.VariantFile(vcf_path) as vcf:
@@ -454,13 +393,6 @@ class HomozygosityAnalyser:
             for ref in ref_samples:
                 if ref not in samples:
                     raise ValueError(f"Reference sample {ref} not found in VCF. Available: {samples}")
-    
-    def _generate_windows(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate windowed homozygosity analysis"""
-        if self.use_snp_windows:
-            return self._generate_snp_windows(variants_df)
-        else:
-            return self._generate_bp_windows(variants_df)
 
     def _generate_windows_single_chrom(self, variants_df: pd.DataFrame) -> pd.DataFrame:
         """Generate windows for single chromosome"""
@@ -468,43 +400,6 @@ class HomozygosityAnalyser:
             return self._generate_snp_windows_single_chrom(variants_df)
         else:
             return self._generate_bp_windows_single_chrom(variants_df)
-
-    def _generate_bp_windows(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate base-pair based windows with proper boundaries"""
-        windowed_data = []
-        
-        for chrom in tqdm(variants_df['chrom'].unique(), desc="Generating BP windows"):
-            chrom_data = variants_df[variants_df['chrom'] == chrom].copy()
-            chrom_data = chrom_data.sort_values('pos')
-            
-            if len(chrom_data) == 0:
-                continue
-            
-            min_pos = int(chrom_data['pos'].min())
-            max_pos = int(chrom_data['pos'].max())
-            
-            # Proper window generation - don't exceed data range
-            window_start = min_pos
-            while window_start < max_pos:
-                window_end = min(window_start + self.window_size, max_pos + 1)
-                
-                window_variants = chrom_data[
-                    (chrom_data['pos'] >= window_start) & 
-                    (chrom_data['pos'] < window_end)
-                ]
-                
-                if len(window_variants) > 0:
-                    windowed_data.append({
-                        'chrom': chrom,
-                        'start': window_start,
-                        'end': window_end,
-                        'score': window_variants['score'].mean(),
-                        'variant_count': len(window_variants)
-                    })
-                
-                window_start += self.step_size
-        
-        return pd.DataFrame(windowed_data)
 
     def _generate_bp_windows_single_chrom(self, variants_df: pd.DataFrame) -> pd.DataFrame:
         """Generate BP windows for single chromosome"""
@@ -537,30 +432,6 @@ class HomozygosityAnalyser:
                 })
             
             window_start += self.step_size
-        
-        return pd.DataFrame(windowed_data)
-
-    def _generate_snp_windows(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate SNP-count based windows"""
-        windowed_data = []
-        
-        for chrom in tqdm(variants_df['chrom'].unique(), desc="Generating SNP windows"):
-            chrom_data = variants_df[variants_df['chrom'] == chrom].copy()
-            chrom_data = chrom_data.sort_values('pos')
-            
-            if len(chrom_data) < self.snp_window_size:
-                continue
-            
-            for i in range(0, len(chrom_data) - self.snp_window_size + 1, self.snp_step_size):
-                window_variants = chrom_data.iloc[i:i + self.snp_window_size]
-                
-                windowed_data.append({
-                    'chrom': chrom,
-                    'start': int(window_variants['pos'].min()),
-                    'end': int(window_variants['pos'].max()) + 1,  # BED format end
-                    'score': window_variants['score'].mean(),
-                    'variant_count': len(window_variants)
-                })
         
         return pd.DataFrame(windowed_data)
 
