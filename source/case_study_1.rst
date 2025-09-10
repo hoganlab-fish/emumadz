@@ -773,14 +773,51 @@ Visualising data
 Preparing data for visualisation
 ********************************
 
-The aim is to visualise the tracks containing all reads at each SNP position. Visualising the entire genome is ideal but the size of the alignment data makes this step impractical. Therefore, we subset the ``bam`` alignment files for **reads containing the final subset of SNPs only**  for a portable but still informative ``bam`` file. The full ``bam`` file can also be loaded and mounted on a separate volume if needed.Here we parse the final ``vcf`` files into a format suitable for visualisation.
+Visualise mutation hotspots (genome-level visualisation)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The aim is to `visualise homozygosity hotspots across the entire genome`. This allows a user to "zoom in" on hotspots for further investigation. Complements and acts as a second layer of validation for base-level visualisation.
+
+
+
+.. hint::
+    This step can be performed directly ``vcf`` files are merged. It is located in the visualisation section for convenient reference.
+
+Visualise individual SNPs (single base level resolution)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The aim is to `visualise all reads at each SNP position`. This allows a user to investigate individual SNPs at single base level resolution. Complements and acts as a second layer of validation for genome-level visualisation. 
+
+.. code-block:: shell
+
+    prep_tdf() {
+        local sample=$1
+        local infile_dir="${RESULTS_DIR}/05_samples_merged/"
+        local outfile_dir="${RESULTS_DIR}/10_visualisations/"
+
+        python calculate_homozygosity.py \
+            "${infile_dir}/${sample}.vcf.gz" \
+            "${SAMPLESHEET}" \
+            "${outfile_dir}/${sample}.csv" \
+            --coverage_report "${outfile_dir}/${sample}_coverage.csv" \
+            --chrom_mapping ${CHROM_MAP} \
+            --force_overwrite
+    }
+    
+    for sample in "${MUT_SAMPLES[@]}"; do 
+        prep_tdf $sample
+    done
+
+The tables generated here contain all the necessary information which can be visualised in the user's method of choice (e.g. ``R`` or ``pandas`` dataframes.) The ``bam`` files (subsetted or full) can be viewed in the user's genomic browser of choice, e.g. ``IGV``, ``JBrowse``, ``gosling``.
+
+Visualising the entire genome is ideal but the size of the alignment data makes this step impractical. Therefore, we subset the ``bam`` alignment files for **reads containing the final subset of SNPs only**  for a portable but still informative ``bam`` file. The full ``bam`` file can also be loaded and mounted on a separate volume if needed. Here we parse the final ``vcf`` files into a format suitable for visualisation.
 
 .. hint::
     Skipping ``bam`` file subsetting and inspecting the full file is also valid. However, portability is an on-going issue due to ``bam`` file size (in this case ~10-20GB each).
 
 .. code-block:: shell
 
-    prep_vis() {
+    prep_bam() {
         local sample=$1
         local infile_dir="${RESULTS_DIR}/08_annot_all/"
         local outfile_dir="${RESULTS_DIR}/10_visualisations/"
@@ -797,7 +834,7 @@ The aim is to visualise the tracks containing all reads at each SNP position. Vi
     }
     
     for sample in "${MUT_SAMPLES[@]}"; do 
-        prep_vis $sample
+        prep_bam $sample
     done
 
 The tables generated here contain all the necessary information which can be visualised in the user's method of choice (e.g. ``R`` or ``pandas`` dataframes.) The ``bam`` files (subsetted or full) can be viewed in the user's genomic browser of choice, e.g. ``IGV``, ``JBrowse``, ``gosling``.
