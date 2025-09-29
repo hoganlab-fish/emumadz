@@ -147,7 +147,7 @@ Here we setup the file structure and some other metadata.
 
         # paths relative to source directory
         DATA_DIR="../data/"
-        RESULTS_DIR="../results/"
+        RESULTS_DIR="../results.F0-F2/"
         SAMPLESHEET="${DATA_DIR}/samplesheet.F0-F2.tsv"
         REFERENCE_FA="${DATA_DIR}/Reference/GCA_000002035.2_Zv9_genomic.fna"
         REF_FIXED_FA="${DATA_DIR}/Reference/GCA_000002035.2_Zv9_genomic.ChrFixed.fna"

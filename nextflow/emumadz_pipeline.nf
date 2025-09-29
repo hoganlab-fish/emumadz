@@ -66,50 +66,6 @@ if (params.help) {
     exit 0
 }
 
-// Validate required parameters
-if (!params.samplesheet || !params.reference_fa || !params.ref_fixed_fa || !params.chrom_map) {
-    log.error "Missing required parameters. Use --help for usage information."
-    exit 1
-}
-
-// Parse samplesheet
-Channel
-    .fromPath(params.samplesheet)
-    .splitCsv(header: true, sep: '\t')
-    .map { row -> [row.sample_identity, row.alignment_file, row.sample_type] }
-    .filter { sample_id, bam_path, sample_type -> sample_type == 'mutant' }
-    .map { sample_id, bam_path, sample_type -> 
-        [sample_id, file(bam_path), file("${bam_path}.bai")]
-    }
-    .set { mutant_samples }
-
-Channel
-    .fromPath(params.samplesheet)
-    .splitCsv(header: true, sep: '\t')
-    .map { row -> [row.sample_identity, row.alignment_file, row.sample_type] }
-    .filter { sample_id, bam_path, sample_type -> sample_type == 'reference' }
-    .map { sample_id, bam_path, sample_type -> 
-        [sample_id, file(bam_path), file("${bam_path}.bai")]
-    }
-    .set { reference_samples }
-
-// Combine all samples for variant calling
-Channel
-    .fromPath(params.samplesheet)
-    .splitCsv(header: true, sep: '\t')
-    .map { row -> [row.sample_identity, row.alignment_file, row.sample_type] }
-    .map { sample_id, bam_path, sample_type -> 
-        [sample_id, file(bam_path), file("${bam_path}.bai"), sample_type]
-    }
-    .set { all_samples }
-
-// Reference files
-ref_fa = file(params.reference_fa)
-ref_fixed_fa = file(params.ref_fixed_fa)
-chrom_map = file(params.chrom_map)
-samplesheet = file(params.samplesheet)
-parse_script = file('../emumadz/parse_vcf.py')
-
 // GATK filter parameters
 params.qd_threshold = 2.0
 params.qual_threshold = 30.0
@@ -516,6 +472,37 @@ process prepare_visualization {
 
 // Main workflow
 workflow {
+    // Validate required parameters
+    if (!params.samplesheet || !params.reference_fa || !params.ref_fixed_fa || !params.chrom_map) {
+        log.error "Missing required parameters. Use --help for usage information."
+        exit 1
+    }
+
+    log.info "samplesheet: ${params.samplesheet}"
+    log.info "reference_fa: ${params.reference_fa}"
+    log.info "ref_fixed_fa: ${params.ref_fixed_fa}"
+    log.info "chrom_map: ${params.chrom_map}"    
+    log.info "parse_vcf.py: ${projectDir}/bin/parse_vcf.py"
+    // Create file objects after validation
+    ref_fa = file(params.reference_fa)
+    ref_fixed_fa = file(params.ref_fixed_fa)
+    chrom_map = file(params.chrom_map)
+    samplesheet = file(params.samplesheet)
+    parse_script = file("${projectDir}/bin/parse_vcf.py")
+    
+    // Parse samplesheet and create channels
+    all_samples = Channel
+        .fromPath(params.samplesheet)
+        .splitCsv(header: true, sep: '\t')
+        .map { row -> [row.sample_identity, row.alignment_file, row.sample_type] }
+        // .map { sample_id, bam_path, sample_type -> 
+        //     [sample_id, file(bam_path), file("${bam_path}.bai"), sample_type]
+        // }
+        .map { sample_id, bam_path, sample_type -> 
+            log.info "sample_id: ${sample_id}, bam_path: ${bam_path}, sample_type: ${sample_type}"
+            [sample_id, file(bam_path), file("${bam_path}.bai"), sample_type]
+}
+    
     // Setup metadata
     setup_metadata(ref_fa, ref_fixed_fa)
     

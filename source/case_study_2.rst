@@ -85,7 +85,7 @@ Here is the directory structure::
     project_root/
     ├── source/         # Scripts are run from here
     ├── data/           # Input data (BAM files, reference genome, samplesheet)
-    └── results/        # All output files organized by processing step
+    └── results.F2-F2/        # All output files organized by processing step
         ├── 01_variant_called
         ├── 02_chromosome_filtered
         ├── 03_stringent_filtered
@@ -112,7 +112,7 @@ Create a samplesheet with sample identifiers, paths to bam file and the sample t
 In our case, this is how our table looks like:
 
 .. csv-table:: Example samplesheet for F2-F2 comparison
-   :file: tables/samplesheet.F0-F2.csv
+   :file: tables/samplesheet.F2-F2.csv
    :header-rows: 1
 
 Here we setup the file structure and some other metadata.
@@ -195,6 +195,29 @@ Create some metadata files. The chromosome file maps the chromosome IDs onto the
 
     setup
     setup_metadata
+
+Nextflow
+++++++++
+
+.. note::
+    This step is equivalent to running the rest of the pipeline manually for the given sample(s).
+
+Example of using ``nextflow``:
+
+.. code-block:: shell
+
+    samplesheet="../data/samplesheet.F2-F2.122-3-I.tsv"
+    reference_fa="../data/Reference/GCA_000002035.2_Zv9_genomic.fna"
+    ref_fixed_fa="../data/Reference/GCA_000002035.2_Zv9_genomic.ChrFixed.fna"
+    chrom="../data/chrom_table.tsv"
+    results="../results.F2-F2/122-3-I/"
+    
+    nextflow run emumadz_pipeline.nf \
+        --samplesheet ${samplesheet} \
+        --reference_fa ${reference_fa} \
+        --ref_fixed_fa ${ref_fixed_fa} \
+        --chrom_map ${chrom} \
+        --outdir ${results}
 
 Whole zebrafish genome assembly
 +++++++++++++++++++++++++++++++
