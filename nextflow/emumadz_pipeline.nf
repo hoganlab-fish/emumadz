@@ -25,7 +25,7 @@ params.chrom_map = null
 params.outdir = './results'
 params.threads = 16
 params.gatk_threads = 4
-params.gatk_mem = '64g'
+params.gatk_mem = '128g'
 params.java_options = '-Xms512m -Xmx16g'
 params.vep_assembly = 'Zv9'
 params.vep_version = '79'
@@ -60,7 +60,7 @@ if (params.help) {
         --outdir               Output directory (default: ./results)
         --threads              Number of threads (default: 16)
         --gatk_threads         Number of threads for GATK (default: 4)
-        --gatk_mem             GATK memory allocation (default: 64g)
+        --gatk_mem             GATK memory allocation (default: 128g)
         --apply_custom_filters Apply stringent GATK filters (default: false)
         --gatk_filters_config  Path to GATK filters configuration file (optional)
         --snpeff_config        Path to snpEff configuration file (optional)
@@ -138,6 +138,9 @@ process call_variants {
     
     # Create sequence dictionary
     gatk CreateSequenceDictionary -R ${ref_fa}
+
+    # Re-create bam indices
+    samtools index -@ ${params.threads} ${bam_file}
 
     gatk --java-options "${gatk_java_opts}" HaplotypeCaller \\
         -R ${ref_fa} \\
