@@ -86,7 +86,7 @@ if (params.gatk_filters_config) {
 // Process definitions
 
 process setup_metadata {
-    container 'broadinstitute/gatk:4.6.2.0'
+    container 'broadinstitute/gatk:4.5.0.0'
     publishDir "${params.outdir}/metadata", mode: 'copy'
     
     input:
@@ -118,7 +118,7 @@ process setup_metadata {
 }
 
 process call_variants {
-    container 'broadinstitute/gatk:4.6.2.0'
+    container 'broadinstitute/gatk:4.5.0.0'
     publishDir "${params.outdir}/variants", mode: 'copy'
     cpus params.threads
     memory params.gatk_mem
@@ -201,7 +201,7 @@ process filter_chromosomes {
 }
 
 process apply_custom_filters {
-    container 'broadinstitute/gatk:4.6.2.0'
+    container 'broadinstitute/gatk:4.5.0.0'
     publishDir "${params.outdir}/custom_filtered", mode: 'copy'
     cpus params.threads
     memory params.gatk_mem

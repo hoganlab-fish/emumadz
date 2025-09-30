@@ -28,7 +28,7 @@ workflow {
 
 // Test processes
 process test_gatk {
-    container 'broadinstitute/gatk:4.6.2.0'
+    container 'broadinstitute/gatk:4.5.0.0'
     
     output:
     stdout
