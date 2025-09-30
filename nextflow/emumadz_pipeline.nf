@@ -24,7 +24,8 @@ params.ref_fixed_fa = null
 params.chrom_map = null
 params.outdir = './results'
 params.threads = 16
-params.gatk_mem = '128g'
+params.gatk_threads = 4
+params.gatk_mem = '64g'
 params.java_options = '-Xms512m -Xmx16g'
 params.vep_assembly = 'Zv9'
 params.vep_version = '79'
@@ -58,6 +59,7 @@ if (params.help) {
     Optional parameters:
         --outdir               Output directory (default: ./results)
         --threads              Number of threads (default: 16)
+        --gatk_threads         Number of threads for GATK (default: 4)
         --gatk_mem             GATK memory allocation (default: 64g)
         --apply_custom_filters Apply stringent GATK filters (default: false)
         --gatk_filters_config  Path to GATK filters configuration file (optional)
@@ -146,7 +148,7 @@ process call_variants {
         --stand-call-conf ${params.stand_call_conf} \\
         --max-reads-per-alignment-start ${params.max_reads_per_alignment_start} \\
         --max-mnp-distance ${params.max_mnp_distance} \\
-        --native-pair-hmm-threads ${params.threads} \\
+        --native-pair-hmm-threads ${params.gatk_threads} \\
         --verbosity INFO
     """
 }
