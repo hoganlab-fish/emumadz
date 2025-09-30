@@ -24,13 +24,13 @@ params.ref_fixed_fa = null
 params.chrom_map = null
 params.outdir = './results'
 params.threads = 16
-params.gatk_mem = '64g'
+params.gatk_mem = '128g'
 params.java_options = '-Xms512m -Xmx16g'
 params.vep_assembly = 'Zv9'
 params.vep_version = '79'
 params.vep_cache = "${HOME}/.vep"
 params.vep_buffer = '8192'
-params.snpeff_config = '../emumadz/snpEff.config'
+params.snpeff_config = null
 params.snpeff_genome = 'Zv9.75'
 params.min_mapping_quality = 20
 params.min_base_quality = 20
@@ -61,6 +61,7 @@ if (params.help) {
         --gatk_mem             GATK memory allocation (default: 64g)
         --apply_custom_filters Apply stringent GATK filters (default: false)
         --gatk_filters_config  Path to GATK filters configuration file (optional)
+        --snpeff_config        Path to snpEff configuration file (optional)
         --help                 Show this help message
     """
     exit 0
@@ -83,6 +84,7 @@ if (params.gatk_filters_config) {
 // Process definitions
 
 process setup_metadata {
+    container 'broadinstitute/gatk:4.6.2.0'
     publishDir "${params.outdir}/metadata", mode: 'copy'
     
     input:
@@ -90,26 +92,23 @@ process setup_metadata {
     path ref_fixed_fa
     
     output:
-    path "*.fai", emit: ref_fai
-    path "*.dict", emit: ref_dict
+    path ref_fa, emit: ref_fa_indexed
+    path "${ref_fa}.fai", emit: ref_fai
+    path "${ref_fa.baseName}.dict", emit: ref_dict
+    path ref_fixed_fa, emit: ref_fixed_indexed
+    path "${ref_fixed_fa}.fai", emit: ref_fixed_fai
     path "chromosomes.txt", emit: chromosomes
     
     script:
     """
     # Create FASTA index for reference
-    if [[ ! -f "${ref_fa}.fai" ]]; then
-        samtools faidx ${ref_fa}
-    fi
+    samtools faidx ${ref_fa}
     
     # Create sequence dictionary
-    if [[ ! -f "${ref_fa.baseName}.dict" ]]; then
-        gatk CreateSequenceDictionary -R ${ref_fa}
-    fi
+    gatk CreateSequenceDictionary -R ${ref_fa}
     
     # Create FASTA index for fixed reference
-    if [[ ! -f "${ref_fixed_fa}.fai" ]]; then
-        samtools faidx ${ref_fixed_fa}
-    fi
+    samtools faidx ${ref_fixed_fa}
     
     # Create chromosome list
     grep -P "^chr[0-9]+\t" ${ref_fixed_fa}.fai > chromosomes.txt
@@ -132,6 +131,12 @@ process call_variants {
     script:
     gatk_java_opts = "-Xmx${params.gatk_mem} -XX:+UseParallelGC"
     """
+    # Create FASTA index for reference
+    samtools faidx ${ref_fa}
+    
+    # Create sequence dictionary
+    gatk CreateSequenceDictionary -R ${ref_fa}
+
     gatk --java-options "${gatk_java_opts}" HaplotypeCaller \\
         -R ${ref_fa} \\
         -I ${bam_file} \\
@@ -385,6 +390,7 @@ process annotate_snpeff {
     
     input:
     tuple val(sample_id), path(vcf_file), path(vcf_index)
+    path snpeff_config
     
     output:
     tuple val(sample_id), path("${sample_id}.vcf.gz"), path("${sample_id}.vcf.gz.tbi"), emit: vcf_with_index
@@ -393,12 +399,13 @@ process annotate_snpeff {
     path "*.html", emit: stats_html
     
     script:
+    config_opt = snpeff_config ? "-c ${snpeff_config}" : ""
     """
     export JAVA_OPTIONS="${params.java_options}"
     
     # Run snpEff
     snpEff \\
-        -c ${params.snpeff_config} \\
+        ${config_opt} \\
         -csvStats ${sample_id}.csv \\
         -i vcf \\
         -o vcf \\
@@ -478,11 +485,6 @@ workflow {
         exit 1
     }
 
-    log.info "samplesheet: ${params.samplesheet}"
-    log.info "reference_fa: ${params.reference_fa}"
-    log.info "ref_fixed_fa: ${params.ref_fixed_fa}"
-    log.info "chrom_map: ${params.chrom_map}"    
-    log.info "parse_vcf.py: ${projectDir}/bin/parse_vcf.py"
     // Create file objects after validation
     ref_fa = file(params.reference_fa)
     ref_fixed_fa = file(params.ref_fixed_fa)
@@ -495,13 +497,9 @@ workflow {
         .fromPath(params.samplesheet)
         .splitCsv(header: true, sep: '\t')
         .map { row -> [row.sample_identity, row.alignment_file, row.sample_type] }
-        // .map { sample_id, bam_path, sample_type -> 
-        //     [sample_id, file(bam_path), file("${bam_path}.bai"), sample_type]
-        // }
         .map { sample_id, bam_path, sample_type -> 
-            log.info "sample_id: ${sample_id}, bam_path: ${bam_path}, sample_type: ${sample_type}"
             [sample_id, file(bam_path), file("${bam_path}.bai"), sample_type]
-}
+        }
     
     // Setup metadata
     setup_metadata(ref_fa, ref_fixed_fa)
@@ -548,7 +546,8 @@ workflow {
     annotate_vep(find_candidates.out.vcf_with_index)
     
     // Annotate with snpEff
-    annotate_snpeff(find_candidates.out.vcf_with_index)
+    snpeff_config_file = params.snpeff_config ? file(params.snpeff_config) : []
+    annotate_snpeff(find_candidates.out.vcf_with_index, snpeff_config_file)
     
     // Combine annotations
     combine_annotations(annotate_vep.out.vcf_with_index, annotate_snpeff.out.vcf_with_index)
