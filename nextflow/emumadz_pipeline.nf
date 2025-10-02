@@ -24,7 +24,7 @@ params.ref_fixed_fa = null
 params.chrom_map = null
 params.outdir = './results'
 params.threads = 16
-params.gatk_threads = 4
+params.gatk_threads = 1
 params.gatk_mem = '128g'
 params.java_options = '-Xms512m -Xmx16g'
 params.vep_assembly = 'Zv9'
@@ -88,6 +88,7 @@ if (params.gatk_filters_config) {
 process setup_metadata {
     container 'broadinstitute/gatk:4.5.0.0'
     publishDir "${params.outdir}/metadata", mode: 'copy'
+    time '2.h'
     
     input:
     path ref_fa
@@ -122,6 +123,7 @@ process call_variants {
     publishDir "${params.outdir}/variants", mode: 'copy'
     cpus params.threads
     memory params.gatk_mem
+    time '108.h'
     
     input:
     tuple val(sample_id), path(bam_file), path(bam_index), val(sample_type)
@@ -142,6 +144,7 @@ process call_variants {
     # Re-create bam indices
     samtools index -@ ${params.threads} ${bam_file}
 
+    echo "${gatk_java_opts}"
     gatk --java-options "${gatk_java_opts}" HaplotypeCaller \\
         -R ${ref_fa} \\
         -I ${bam_file} \\
@@ -160,6 +163,7 @@ process filter_chromosomes {
     container 'staphb/bcftools:1.22'
     publishDir "${params.outdir}/filtered", mode: 'copy'
     cpus params.threads
+    time '2.h'
     
     input:
     tuple val(sample_id), path(vcf_file), path(vcf_index), val(sample_type)
@@ -205,7 +209,8 @@ process apply_custom_filters {
     publishDir "${params.outdir}/custom_filtered", mode: 'copy'
     cpus params.threads
     memory params.gatk_mem
-    
+    time '24.h'
+
     input:
     tuple val(sample_id), path(vcf_file), path(vcf_index), val(sample_type)
     path ref_fa
@@ -249,6 +254,7 @@ process normalise_vcf {
     container 'staphb/bcftools:1.22'
     publishDir "${params.outdir}/normalized", mode: 'copy'
     cpus params.threads
+    time '24.h'
     
     input:
     tuple val(sample_id), path(vcf_file), path(vcf_index), val(sample_type)
@@ -269,6 +275,7 @@ process merge_vcf {
     container 'staphb/bcftools:1.22'
     publishDir "${params.outdir}/merged", mode: 'copy'
     cpus params.threads
+    time '24.h'
     
     input:
     tuple val(sample_id), path(vcf_file), path(vcf_index), val(sample_type), path(reference_vcfs)
@@ -294,6 +301,7 @@ process filter_snps {
     container 'staphb/bcftools:1.22'
     publishDir "${params.outdir}/snps", mode: 'copy'
     cpus params.threads
+    time '2.h'
     
     input:
     tuple val(sample_id), path(vcf_file), path(vcf_index)
@@ -314,6 +322,7 @@ process find_candidates {
     container 'staphb/bcftools:1.22'
     publishDir "${params.outdir}/candidates", mode: 'copy'
     cpus params.threads
+    time '24.h'
     
     input:
     tuple val(sample_id), path(vcf_file), path(vcf_index), val(num_refs)
@@ -353,6 +362,7 @@ process annotate_vep {
     container 'ensemblorg/ensembl-vep'
     publishDir "${params.outdir}/vep", mode: 'copy'
     cpus params.threads
+    time '24.h'
     
     input:
     tuple val(sample_id), path(vcf_file), path(vcf_index)
@@ -392,6 +402,7 @@ process annotate_snpeff {
     container 'staphb/snpeff:5.2f'
     publishDir "${params.outdir}/snpeff", mode: 'copy'
     cpus params.threads
+    time '24.h'
     
     input:
     tuple val(sample_id), path(vcf_file), path(vcf_index)
@@ -428,6 +439,7 @@ process combine_annotations {
     container 'staphb/bcftools:1.22'
     publishDir "${params.outdir}/annotated", mode: 'copy'
     cpus params.threads
+    time '24.h'
     
     input:
     tuple val(sample_id), path(vep_vcf), path(vep_index)
@@ -451,6 +463,7 @@ process prepare_visualization {
     container 'tyronechen/pysam_pandas'
     publishDir "${params.outdir}/visualization", mode: 'copy'
     cpus params.threads
+    time '24.h'
     
     input:
     tuple val(sample_id), path(vcf_file), path(vcf_index)
