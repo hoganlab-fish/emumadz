@@ -48,16 +48,11 @@ affiliations:
    index: 3
 date: 1 November 2025
 bibliography: paper.bib
-
-# Optional fields if submitting to a AAS journal too, see this blog post:
-# https://blog.joss.theoj.org/2018/12/a-new-collaboration-with-aas-publishing
-# aas-doi: 10.3847/xxxxx <- update this with the DOI from AAS once you know it.
-# aas-journal: Astrophysical Journal <- The name of the AAS journal.
 ---
 
 # Summary
 
-`EMUMADZ` is a species-agnostic tool incorporating multiple command line tools for forward genetics screening. We optimised a pipeline that (a) mapped mutations to a region of genomic linkage and (b) identified candidate Single Nucleotide Polymorphisms (SNPs) predicted to be damaging to gene function, matching (c) essential criteria of homozygous mutations which are `N-ethyl-N-nitrosourea`(ENU)-induced and absent in control reference samples. `Nextflow` was used to improve the scalability and portability of the pipeline, along with other quality of life features such as process checkpointing [@di2017nextflow:2017]. At the same time, the high-level API is designed to provide easy usage for individuals running the pipeline. Code is designed in a modular way, allowing users to reuse or modify specific processes to suit their own needs. Extensive documentation exists, with two case studies on _Danio rerio_: the zebrafish. 
+`EMUMADZ` is a species-agnostic tool incorporating multiple command line tools for forward genetics screening. We optimised a pipeline that (a) mapped mutations to a region of genomic linkage and (b) identified candidate Single Nucleotide Polymorphisms (SNPs) predicted to be damaging to gene function, matching (c) essential criteria of homozygous mutations which are _N-ethyl-N-nitrosourea_(ENU)-induced and absent in control reference samples. `Nextflow` was used to improve the scalability and portability of the pipeline, along with other quality of life features such as process checkpointing [@di2017nextflow]. At the same time, the high-level API is designed to provide easy usage for individuals running the pipeline. Code is designed in a modular way, allowing users to reuse or modify specific processes to suit their own needs. Extensive documentation exists, with two case studies on _Danio rerio_: the zebrafish. 
 
 The primary motivation for devleoping this pipeline stems from the fact that forward genetic screening in model organisms remains a powerful tool for identifying unexpected new genes involved in any biological process of interest. Characterising mutants and their candidate causative mutations, often in the form of SNPs, frequently lead to new insights on gene function in previously unknown genes or other genomic regions of interest. 
 
@@ -77,7 +72,7 @@ Additional important features are also performed in the background as needed:
 2. Decomposition of multiallelic variants
 3. Merging of files to accommodate multi-sample comparisons
 
-`EMUMADZ` is designed to be used by bioinformaticians interested in analysing forward genetics screening data, for example with the chemical mutagen ENU to discover new autosomal recessive mutations in biological processes of interest. It incorporates state of the art tools such as `gatk`, `bcftools`, `samtools`, `snpEff` and `ensembl-vep` [@mckenna2010genome:2010;@10.1093/gigascience/giab008:2021;cingolani2012variant:2012;mclaren2016ensembl:2016], all which will be familiar to those in the field. However, we note that no prior knowledge of these tools are required. Case studies demonstrating a run of the pipeline exist. These were intentionally written to be informative to both biologists and bioinformaticians, where individual steps are explained in their biological context with their corresponding code block.
+`EMUMADZ` is designed to be used by bioinformaticians interested in analysing forward genetics screening data, for example with the chemical mutagen ENU to discover new autosomal recessive mutations in biological processes of interest. It incorporates state of the art tools such as `gatk`, `bcftools`, `samtools`, `snpEff` and `ensembl-vep` [@mckenna2010genome;danecek2021twelve;cingolani2012variant;mclaren2016ensembl], all which will be familiar to those in the field. However, we note that no prior knowledge of these tools are required. Case studies demonstrating a run of the pipeline exist. These were intentionally written to be informative to both biologists and bioinformaticians, where individual steps are explained in their biological context with their corresponding code block.
 
 A large scale forward genetic screen was performed using the chemical mutagen N-ethyl-N-nitrosourea (ENU) to discover new autosomal recessive mutations in biological processes of interest. To identify candidate causative mutations for screened mutants, a low coverage (~10x) whole genome sequencing (WGS) was performed. To map homozygous mutants to the genome for subsequent identification of candidate mutations, WGS data was generated from mutant animals and control samples. We optimised a pipeline that (a) mapped mutations to a region of genomic linkage and (b) identified candidate SNPs predicted to be damaging to gene function, matching (c) essential criteria of homozygous mutations which are ENU-induced and absent in control reference samples.
 
