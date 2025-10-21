@@ -51,11 +51,11 @@ class VCFParser:
         
         # Get reference samples for shared processing
         self.reference_samples = {
-            sample_identity: alignment_file for sample_identity, (alignment_file, sample_type) 
+            sample_id: bam_file for sample_id, (bam_file, sample_type) 
             in self.sample_info.items() if sample_type.lower() in ['control', 'reference']
             }
     
-    def get_relative_alignment_file(
+    def get_relative_bam_file(
             self, output_file: str, bam_filename: str, subset_path: str
         ) -> str:
         """Get the correct relative path from output JSON to BAM file.
@@ -177,7 +177,7 @@ class VCFParser:
         
         :param vcf_sample: Sample name from VCF
         :type vcf_sample: str
-        :returns: Tuple of (alignment_file, sample_type)
+        :returns: Tuple of (bam_file, sample_type)
         :rtype: Tuple[Optional[str], Optional[str]]
         """
         # Exact match first
@@ -205,39 +205,39 @@ class VCFParser:
         :type variant_positions: List[Tuple[str, int]]
         :param force_overwrite: Overwrites bam files
         :type force_overwrite: bool
-        :returns: Dictionary mapping sample_identity to output BAM path
+        :returns: Dictionary mapping sample_id to output BAM path
         :rtype: Dict[str, str]
         """
-        reference_alignment_files = {}
+        reference_bam_files = {}
         
-        for ref_sample_identity, ref_alignment_file in self.reference_samples.items():
-            if not os.path.exists(ref_alignment_file):
+        for ref_sample_id, ref_bam_file in self.reference_samples.items():
+            if not os.path.exists(ref_bam_file):
                 continue
                 
-            output_path = os.path.join(subset_path, f"{ref_sample_identity}_reference.bam")
+            output_path = os.path.join(subset_path, f"{ref_sample_id}_reference.bam")
             
             # Skip if already exists
             if os.path.exists(output_path) and not force_overwrite:
-                reference_alignment_files[ref_sample_identity] = f"{ref_sample_identity}_reference.bam"
+                reference_bam_files[ref_sample_id] = f"{ref_sample_id}_reference.bam"
                 continue
                 
             # Pass ALL variant positions to create_bam_subset, not just the first one
-            success = self.create_bam_subset(ref_alignment_file, variant_positions, output_path)
+            success = self.create_bam_subset(ref_bam_file, variant_positions, output_path)
             if success:
-                reference_alignment_files[ref_sample_identity] = f"{ref_sample_identity}_reference.bam"
+                reference_bam_files[ref_sample_id] = f"{ref_sample_id}_reference.bam"
         
-        return reference_alignment_files
+        return reference_bam_files
     
     def create_bam_subset(
             self, 
-            alignment_file: str, 
+            bam_file: str, 
             variant_positions: List[Tuple[str, int]], 
             output_path: str 
         ) -> bool:
         """Create subset BAM containing reads around variant positions.
         
-        :param alignment_file: Path to source BAM file
-        :type alignment_file: str
+        :param bam_file: Path to source BAM file
+        :type bam_file: str
         :param variant_positions: List of (chromosome, position) tuples
         :type variant_positions: List[Tuple[str, int]]
         :param output_path: Output BAM file path
@@ -248,11 +248,11 @@ class VCFParser:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         # Index BAM if needed
-        if not os.path.exists(alignment_file + ".bai") or \
-            not os.path.exists(alignment_file.replace(".bam", ".bai")):
-            pysam.index(alignment_file)
+        if not os.path.exists(bam_file + ".bai") or \
+            not os.path.exists(bam_file.replace(".bam", ".bai")):
+            pysam.index(bam_file)
         
-        with pysam.AlignmentFile(alignment_file, "rb") as inbam:
+        with pysam.AlignmentFile(bam_file, "rb") as inbam:
             # Modify header for chromosome renaming
             header = inbam.header.to_dict()
             if self.chrom_mapping and 'SQ' in header:
@@ -328,22 +328,22 @@ class VCFParser:
         :returns: Success status
         :rtype: bool
         """
-        sample_identity = sample_data['sample_identity']
-        alignment_file = sample_data['alignment_file']
+        sample_id = sample_data['sample_identity']
+        bam_file = sample_data['alignment_file']
         output_path = sample_data['output_path']
         variants = sample_data['variants']
         
         if os.path.exists(output_path) and not force_overwrite:
             return True
         
-        if not os.path.exists(alignment_file):
+        if not os.path.exists(bam_file):
             return False
         
         variant_positions = [
             (row['chromosome'], row['position']) for _, row in variants.iterrows()
         ]
         return self.create_bam_subset(
-            alignment_file, variant_positions, output_path
+            bam_file, variant_positions, output_path
         )
     
     def validate_bam_subset(
@@ -405,13 +405,13 @@ class VCFParser:
             variant_positions = [(row['chromosome'], row['position'])]
             
             # Check mutant BAM
-            mutant_subset_path = os.path.join(subset_dir, f"{row['sample_identity']}_mutant.bam")
+            mutant_subset_path = os.path.join(subset_dir, f"{row['sample_id']}_mutant.bam")
             is_valid, result = self.validate_bam_subset(mutant_subset_path, variant_positions)
             
             if is_valid:
                 report.append({
                     'variant_id': row['variant_id'],
-                    'sample_identity': row['sample_identity'],
+                    'sample_id': row['sample_identity'],
                     'sample_type': 'mutant',
                     'subset_exists': True,
                     'total_variants': result['total_variants'],
@@ -422,7 +422,7 @@ class VCFParser:
             else:
                 report.append({
                     'variant_id': row['variant_id'],
-                    'sample_identity': row['sample_identity'],
+                    'sample_id': row['sample_identity'],
                     'sample_type': 'mutant',
                     'subset_exists': False,
                     'error': result,
@@ -433,18 +433,18 @@ class VCFParser:
                 })
             
             # Check reference BAMs for this variant
-            if row['reference_alignment_files']:
-                for ref_path in row['reference_alignment_files'].split('|'):
+            if row['reference_bam_files']:
+                for ref_path in row['reference_bam_files'].split('|'):
                     if not ref_path:
                         continue
-                    ref_sample_identity = ref_path.replace('_reference.bam', '')
+                    ref_sample_id = ref_path.replace('_reference.bam', '')
                     ref_subset_path = os.path.join(subset_dir, ref_path)
                     is_valid, result = self.validate_bam_subset(ref_subset_path, variant_positions)
                     
                     if is_valid:
                         report.append({
                             'variant_id': row['variant_id'],
-                            'sample_identity': ref_sample_identity,
+                            'sample_id': ref_sample_id,
                             'sample_type': 'reference',
                             'subset_exists': True,
                             'total_variants': result['total_variants'],
@@ -455,7 +455,7 @@ class VCFParser:
                     else:
                         report.append({
                             'variant_id': row['variant_id'],
-                            'sample_identity': ref_sample_identity,
+                            'sample_id': ref_sample_id,
                             'sample_type': 'reference',
                             'subset_exists': False,
                             'error': result,
@@ -511,20 +511,20 @@ class VCFParser:
             reference_samples = []
             
             for sample_name in record.samples:
-                alignment_file, sample_type = self.match_sample(sample_name)
-                if not alignment_file:
+                bam_file, sample_type = self.match_sample(sample_name)
+                if not bam_file:
                     continue
                 
                 if sample_type.lower() == 'mutant' and mutant_sample is None:
-                    mutant_sample = (sample_name, alignment_file, sample_type)
+                    mutant_sample = (sample_name, bam_file, sample_type)
                 elif sample_type.lower() in ['control', 'reference']:
-                    reference_samples.append((sample_name, alignment_file, sample_type))
+                    reference_samples.append((sample_name, bam_file, sample_type))
             
             if not mutant_sample:
                 continue
             
             # Process mutant sample
-            sample_name, alignment_file, sample_type = mutant_sample
+            sample_name, bam_file, sample_type = mutant_sample
             sample = record.samples[sample_name]
             
             # Get genotype info
@@ -540,12 +540,12 @@ class VCFParser:
             snpeff_top = snpeff_annotations[0] if snpeff_annotations else {}
             
             # Create reference BAM paths list - process once for all variants
-            reference_alignment_files = []
+            reference_bam_files = []
             if subset_path and reference_samples:
                 # Create shared reference BAMs if chromosome mapping exists
-                reference_alignment_files = [
-                    f"{ref_sample_identity}_reference.bam" 
-                    for ref_sample_identity in self.reference_samples.keys()
+                reference_bam_files = [
+                    f"{ref_sample_id}_reference.bam" 
+                    for ref_sample_id in self.reference_samples.keys()
                 ]
             
             # Get full annotations as JSON strings
@@ -563,9 +563,9 @@ class VCFParser:
                 'alt': ','.join([str(alt) for alt in record.alts]),
                 'sample_identity': sample_name,
                 'sample_type': sample_type,
-                'alignment_file': alignment_file,
+                'alignment_file': bam_file,
                 'mutant_bam_subset_path': mutant_bam_filename,
-                'reference_alignment_files': '|'.join(reference_alignment_files),
+                'reference_bam_files': '|'.join(reference_bam_files),
                 'genotype': gt_str,
                 'depth': dp or 0,
                 'quality': gq or 0,
@@ -602,13 +602,13 @@ class VCFParser:
             
             # Update BAM paths to relative paths after subset creation
             data['mutant_bam_subset_path'] = data['mutant_bam_subset_path'].apply(
-                lambda x: self.get_relative_alignment_file(output_file, x, subset_path) if x else ''
+                lambda x: self.get_relative_bam_file(output_file, x, subset_path) if x else ''
             )
             
             # Update reference BAM paths to relative paths
-            data['reference_alignment_files'] = data['reference_alignment_files'].apply(
+            data['reference_bam_files'] = data['reference_bam_files'].apply(
                 lambda x: '|'.join([
-                    self.get_relative_alignment_file(output_file, ref_path, subset_path) 
+                    self.get_relative_bam_file(output_file, ref_path, subset_path) 
                     for ref_path in x.split('|') if ref_path
                 ]) if x else ''
             )
@@ -654,7 +654,7 @@ class VCFParser:
         for _, row in data.iterrows():
             # Add only mutant samples
             sample_data_list.append({
-                'sample_identity': row['sample_identity'],
+                'sample_id': row['sample_identity'],
                 'alignment_file': row['alignment_file'],
                 'output_path': os.path.join(subset_path, f"{row['sample_identity']}_mutant.bam"),
                 'variants': pd.DataFrame([row])
@@ -664,13 +664,13 @@ class VCFParser:
         seen_samples = set()
         unique_sample_data = []
         for sample_data in sample_data_list:
-            key = (sample_data['sample_identity'], sample_data['output_path'])
+            key = (sample_data['sample_id'], sample_data['output_path'])
             if key not in seen_samples:
                 seen_samples.add(key)
                 unique_sample_data.append(sample_data)
             else:
                 for existing in unique_sample_data:
-                    if (existing['sample_identity'], existing['output_path']) == key:
+                    if (existing['sample_id'], existing['output_path']) == key:
                         existing['variants'] = pd.concat([existing['variants'], sample_data['variants']], ignore_index=True)
                         break
         
@@ -682,7 +682,7 @@ class VCFParser:
                     self.process_sample_variants, 
                     sample_data, 
                     force_overwrite
-                    ): sample_data['sample_identity']
+                    ): sample_data['sample_id']
                 for sample_data in unique_sample_data
             }
             
