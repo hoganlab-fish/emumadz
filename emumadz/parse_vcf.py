@@ -16,6 +16,19 @@ class VCFParser:
             samplesheet_file: str, 
             chrom_mapping_file: Optional[str] = None
         ):
+        self.vcf_file = vcf_file
+        print(f"Reading samplesheet: {samplesheet_file}")
+        self.samplesheet = pd.read_csv(samplesheet_file, sep='\t')
+        
+        # Count mutants and references for column position matching
+        mutant_samples = self.samplesheet[self.samplesheet['sample_type'].str.lower() == 'mutant']
+        self.num_mutants = len(mutant_samples)
+        print(f"Number of mutant samples in samplesheet: {self.num_mutants}")
+        
+        # Store sample info for BAM file lookup
+        self.sample_info = dict(zip(self.samplesheet['sample_identity'], 
+                                zip(self.samplesheet['alignment_file'], 
+                                    self.samplesheet['sample_type'])))
         """Parse annotated VCF files and create BAM subsets for variant analysis.
         
         This class processes VCF files with VEP/SnpEff annotations, matches samples 
@@ -75,7 +88,7 @@ class VCFParser:
         # Get absolute paths
         output_dir = os.path.dirname(os.path.abspath(output_file))
         bam_abs_path = os.path.abspath(os.path.join(subset_path, bam_filename))
-        
+
         # Calculate relative path from output directory to BAM file
         try:
             relative_path = os.path.relpath(bam_abs_path, output_dir)
@@ -172,23 +185,34 @@ class VCFParser:
         }
         return colors.get(impact.upper(), '#CCCCCC')
     
-    def match_sample(self, vcf_sample: str) -> Tuple[Optional[str], Optional[str]]:
-        """Match VCF sample to samplesheet entry.
+    def match_sample(self, vcf_sample: str, column_index: int) -> Tuple[Optional[str], Optional[str]]:
+        """Match VCF sample to samplesheet entry based on column position.
         
         :param vcf_sample: Sample name from VCF
         :type vcf_sample: str
+        :param column_index: Zero-based index of the sample column in VCF
+        :type column_index: int
         :returns: Tuple of (bam_file, sample_type)
         :rtype: Tuple[Optional[str], Optional[str]]
         """
-        # Exact match first
-        if vcf_sample in self.sample_info:
-            return self.sample_info[vcf_sample]
+        # Determine sample type from column position
+        expected_type = 'mutant' if column_index < self.num_mutants else 'reference'
+
+        # Get all samples of the expected type
+        matching_samples = [
+            (sample_id, bam_file, sample_type) 
+            for sample_id, (bam_file, sample_type) in self.sample_info.items()
+            if sample_type.lower() == expected_type
+        ]
+
+        # Get the sample at the relative position within its type group
+        relative_pos = column_index if expected_type == 'mutant' else column_index - self.num_mutants
+        if relative_pos < len(matching_samples):
+            sample_id, bam_file, sample_type = matching_samples[relative_pos]
+            # print(f"Matched column {column_index} to {sample_id} ({sample_type})")
+            return bam_file, sample_type
         
-        # Fuzzy match - find samplesheet entry that's a prefix of VCF sample
-        for sheet_sample in self.sample_info:
-            if vcf_sample.startswith(sheet_sample):
-                return self.sample_info[sheet_sample]
-        
+        # print(f"No match found for column {column_index}")
         return None, None
     
     def create_reference_bam_subsets(
@@ -209,11 +233,11 @@ class VCFParser:
         :rtype: Dict[str, str]
         """
         reference_bam_files = {}
-        
+
         for ref_sample_id, ref_bam_file in self.reference_samples.items():
             if not os.path.exists(ref_bam_file):
                 continue
-                
+
             output_path = os.path.join(subset_path, f"{ref_sample_id}_reference.bam")
             
             # Skip if already exists
@@ -251,7 +275,7 @@ class VCFParser:
         if not os.path.exists(bam_file + ".bai") or \
             not os.path.exists(bam_file.replace(".bam", ".bai")):
             pysam.index(bam_file)
-        
+
         with pysam.AlignmentFile(bam_file, "rb") as inbam:
             # Modify header for chromosome renaming
             header = inbam.header.to_dict()
@@ -328,7 +352,7 @@ class VCFParser:
         :returns: Success status
         :rtype: bool
         """
-        sample_id = sample_data['sample_identity']
+        sample_id = sample_data['sample_id']
         bam_file = sample_data['alignment_file']
         output_path = sample_data['output_path']
         variants = sample_data['variants']
@@ -405,7 +429,7 @@ class VCFParser:
             variant_positions = [(row['chromosome'], row['position'])]
             
             # Check mutant BAM
-            mutant_subset_path = os.path.join(subset_dir, f"{row['sample_id']}_mutant.bam")
+            mutant_subset_path = os.path.join(subset_dir, f"{row['sample_identity']}_mutant.bam")
             is_valid, result = self.validate_bam_subset(mutant_subset_path, variant_positions)
             
             if is_valid:
@@ -437,10 +461,11 @@ class VCFParser:
                 for ref_path in row['reference_bam_files'].split('|'):
                     if not ref_path:
                         continue
+                    ref_path = os.path.split(ref_path)[-1]
                     ref_sample_id = ref_path.replace('_reference.bam', '')
                     ref_subset_path = os.path.join(subset_dir, ref_path)
                     is_valid, result = self.validate_bam_subset(ref_subset_path, variant_positions)
-                    
+
                     if is_valid:
                         report.append({
                             'variant_id': row['variant_id'],
@@ -507,26 +532,28 @@ class VCFParser:
                 snpeff_annotations = self.parse_ann_field(ann_data)
             
             # Find mutant and reference samples
-            mutant_sample = None
+            mutant_samples = []
             reference_samples = []
             
-            for sample_name in record.samples:
-                bam_file, sample_type = self.match_sample(sample_name)
+            # Match samples based on their column position
+            for idx, sample_name in enumerate(record.samples):
+                bam_file, sample_type = self.match_sample(sample_name, idx)
                 if not bam_file:
                     continue
                 
-                if sample_type.lower() == 'mutant' and mutant_sample is None:
-                    mutant_sample = (sample_name, bam_file, sample_type)
+                if sample_type.lower() == 'mutant':
+                    mutant_samples.append((sample_name, bam_file, sample_type))
                 elif sample_type.lower() in ['control', 'reference']:
                     reference_samples.append((sample_name, bam_file, sample_type))
             
-            if not mutant_sample:
-                continue
+            # Process each mutant sample - creates a row for each one
+            for mutant_sample in mutant_samples:
+                sample_name, bam_file, sample_type = mutant_sample
             
             # Process mutant sample
             sample_name, bam_file, sample_type = mutant_sample
             sample = record.samples[sample_name]
-            
+
             # Get genotype info
             gt = sample.get('GT', (None, None))
             dp = sample.get('DP', 0)
@@ -585,7 +612,7 @@ class VCFParser:
                 'vep_impact_color': self.get_impact_color(vep_top.get('impact', '')),
                 'snpeff_impact_color': self.get_impact_color(snpeff_top.get('impact', ''))
             }
-            
+           
             variants.append(variant_data)
         
         # Create DataFrame
@@ -604,7 +631,7 @@ class VCFParser:
             data['mutant_bam_subset_path'] = data['mutant_bam_subset_path'].apply(
                 lambda x: self.get_relative_bam_file(output_file, x, subset_path) if x else ''
             )
-            
+
             # Update reference BAM paths to relative paths
             data['reference_bam_files'] = data['reference_bam_files'].apply(
                 lambda x: '|'.join([
@@ -612,7 +639,7 @@ class VCFParser:
                     for ref_path in x.split('|') if ref_path
                 ]) if x else ''
             )
-            
+
             # Generate coverage report if requested
             if coverage_report:
                 report_data = self.generate_coverage_report(data, subset_path)
@@ -628,7 +655,7 @@ class VCFParser:
         # Save JSON with correct relative paths
         json_output = output_file.replace('.csv', '.json')
         data.to_json(json_output, orient='records', indent=2)
-        
+
         return data
     
     def _create_bam_subsets(
