@@ -440,11 +440,11 @@
                         <option value="danRer7">Zebrafish (danRer7/Zv9)</option>
                         <option value="danRer10">Zebrafish (danRer10)</option>
                         <option value="danRer11">Zebrafish (danRer11)</option>                        
-                        <option value="hg38">Human (hg38)</option>
+                        <!-- <option value="hg38">Human (hg38)</option>
                         <option value="hg19">Human (hg19)</option>
                         <option value="mm10">Mouse (mm10)</option>
                         <option value="dm6">Drosophila (dm6)</option>
-                        <option value="ce11">C. elegans (ce11)</option>
+                        <option value="ce11">C. elegans (ce11)</option> -->
                     </select>
                 </div>
                 
@@ -731,13 +731,13 @@
                 'danrer7': ['danrer7', 'zv9'],
                 'danrer10': ['danrer10', 'grcz10'],
                 'danrer11': ['danrer11', 'grcz11'],
-                'hg38': ['hg38', 'grch38'],
-                'hg19': ['hg19', 'grch37'],
-                'mm10': ['mm10', 'grcm38'],
-                'dm6': ['dm6', 'bdgp6'],
-                'ce11': ['ce11', 'wbcel235']
             };
-            
+                // 'hg38': ['hg38', 'grch38'],
+                // 'hg19': ['hg19', 'grch37'],
+                // 'mm10': ['mm10', 'grcm38'],
+                // 'dm6': ['dm6', 'bdgp6'],
+                // 'ce11': ['ce11', 'wbcel235']
+
             // Check if selected genome has a compatibility group
             const compatibleVersions = compatibilityMap[selected];
             if (compatibleVersions) {
