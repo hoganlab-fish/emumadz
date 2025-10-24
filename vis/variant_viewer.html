@@ -464,11 +464,12 @@
                     <label>Impact:
                         <div class="tooltip-container">
                             <span class="tooltip-icon">?</span>
-                            <span class="tooltip-text">Filter by predicted functional impact:<br>• HIGH: Protein truncating (stop gained, frameshift)<br>• MODERATE: Missense, in-frame indels<br>• LOW: Synonymous variants<br>• MODIFIER: Intronic, intergenic variants</span>
+                            <span class="tooltip-text">Filter by predicted functional impact:<br>• HIGH MODERATE: Combination of high and moderate (recommended)<br>• HIGH: Protein truncating (stop gained, frameshift)<br>• MODERATE: Missense, in-frame indels<br>• LOW: Synonymous variants<br>• MODIFIER: Intronic, intergenic variants</span>
                         </div>
                     </label>
                     <select id="impactFilter">
                         <option value="">All Impacts</option>
+                        <option value="HIGH MODERATE">High Moderate</option>
                         <option value="HIGH">High</option>
                         <option value="MODERATE">Moderate</option>
                         <option value="LOW">Low</option>
@@ -502,7 +503,7 @@
             </div>
             
             <p>
-                <span style="color: #0000ff"><em>Contact tyrone if you experience any bugs or have a feature request. In both cases please provide as much information as possible (e.g. steps taken to reproduce a problem). Screenshots may be helpful. Routine (mainly technical) testing was already done, but some bugs may remain.</em></span>
+                <span style="color: #0000ff"><em>Contact tyrone if you experience any bugs or have a feature request. In both cases please provide as much information as possible (e.g. steps taken to reproduce a problem). If the issue is visual, screenshots will be very helpful. Routine (mainly technical) testing was already done, but some bugs may remain.</em></span>
             </p>
 
             <div class="tabs">
@@ -527,15 +528,60 @@
                             <tr>
                                 <th class="frozen-col">Variant ID</th>
                                 <th class="frozen-col">Actions</th>
-                                <th>Genotype</th>
-                                <th>Depth</th>
-                                <th>AF</th>
-                                <th class="vep-header">VEP Gene</th>
-                                <th class="snpeff-header">SnpEff Gene</th>
-                                <th class="vep-header">VEP Impact</th>
-                                <th class="snpeff-header">SnpEff Impact</th>
-                                <th class="vep-header">VEP Consequence</th>
-                                <th class="snpeff-header">SnpEff Effect</th>
+                                <th>Genotype
+                                    <div class="tooltip-container">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-text">Genotype explanation:<br>• 0/0: Homozygous to reference<br>• 0/1: Heterozygous reference/Homozygous mutant<br>• 1/0: Homozygous reference/Heterozygous mutant<br>• 1/1: Homozygous to mutant<br>Note that filters have been intentionally loosened. In this case, this means a homozygosity call will be made if 85% of reads have the same SNP (or lack of).</span>
+                                    </div>
+                                </th>
+                                <th>Depth
+                                    <div class="tooltip-container">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-text">Read depth:<br>The number of reads factored into homozygosity calculations.<br> You may see more (but not less) reads than this number on the IGV genome browser. This is not an error, the data file displays all reads, including those that are low quality for visualisation purposes.</span>
+                                    </div>                                    
+                                </th>
+                                <th>AF
+                                    <div class="tooltip-container">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-text">Allele frequencies:<br>• 0.0: 0 mutant alleles<br>• 0.5: Half (1) mutant allele(s)<br>• 1.0: All mutant alleles<br>Note that in this case, allele frequencies are genotype based (Mendelian genetics) and not read based (i.e. not interpreted as a proportion of reads).</span>
+                                    </div>
+                                </th>
+                                <th class="vep-header">VEP Gene
+                                    <div class="tooltip-container">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-text">Gene as recorded in VEP database.</span>
+                                    </div>
+                                </th>
+                                <th class="snpeff-header">SnpEff Gene
+                                    <div class="tooltip-container">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-text">Gene as recorded in SnpEff database.</span>
+                                    </div>
+                                </th>
+                                <th class="vep-header">VEP Impact
+                                    <div class="tooltip-container">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-text">Impact of modification as recorded in VEP database.</span>
+                                    </div>
+                                </th>
+                                <th class="snpeff-header">SnpEff Impact
+                                    <div class="tooltip-container">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-text">Impact of modification as recorded in SnpEff database.</span>
+                                    </div>                                    
+                                </th>
+                                <th class="vep-header">VEP Consequence
+                                    <div class="tooltip-container">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-text">Description of modification as recorded in VEP database.</span>
+                                    </div>                                    
+                                </th>
+                                <th class="snpeff-header">SnpEff Effect
+                                    <div class="tooltip-container">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-text">Description of modification as recorded in SnpEff database.</span>
+                                    </div>                                    
+                                </th>
                             </tr>
                         </thead>
                         <tbody id="tableBody">
@@ -563,7 +609,18 @@
                         <ul>
                             <li>If this is blank the first time you click on this IGV browser tab, this is not an error. We first need to initialise IGV by clicking the link in the Variant Table tab.</li>
                             <li>If anything unexpected happens, refreshing IGV or the site itself may work.</li>
+                        </ul>
+                    </p>
+                    <h4 style="margin: 0 0 10px 0; color: #495057;">IGV information</h4>
+                    <p style="margin: 0; color: #6c757d; line-height: 1.5;">
+                        <ul>
                             <li>The IGV browser below embeds IGV internally. All features associated with IGV will be the same.</li>
+                            <li>Red colour of the read indicates a forward strand, while blue indicates a reverse strand.</li>
+                            <li>Lighter coloured reads indicate lower quality, darker is better.</li>                            
+                            <li>Our variant caller applied a mapping quality (MAPQ) threshold of 20 == 99% probability that the read is mapped accurately.</li>
+                            <li>Our variant caller applied a base quality (phred) threshold of 20 == 99% probability that the base is called correctly.</li>
+                            <li>These thresholds are generally recommended as a baseline for SNP discovery and used as defaults by most variant callers.</li>
+                            <li>You will still see reads not matching these criteria, as the bam file shows all information by design. However, the filtering has been correctly applied in allele frequency calculations.</li>
                         </ul>
                     </p>
                 </div>                 
@@ -1094,13 +1151,23 @@
                 const impactFilter = document.getElementById('impactFilter').value;
                 const geneFilter = document.getElementById('geneFilter').value.toLowerCase();
                 const depthFilter = parseInt(document.getElementById('depthFilter').value) || 0;
-                
-                return (!chrFilter || variant.chromosome === chrFilter) &&
-                       (!impactFilter || variant.vep_impact === impactFilter || variant.snpeff_impact === impactFilter) &&
-                       (!geneFilter || 
-                        variant.vep_gene.toLowerCase().includes(geneFilter) || 
-                        variant.snpeff_gene.toLowerCase().includes(geneFilter)) &&
-                       (variant.depth >= depthFilter);
+
+                if (impactFilter === 'HIGH MODERATE') {
+                    return (!chrFilter || variant.chromosome === chrFilter) &&
+                        (['HIGH', 'MODERATE'].includes(variant.vep_impact) || 
+                         ['HIGH', 'MODERATE'].includes(variant.snpeff_impact)) &&
+                        (!geneFilter || 
+                            variant.vep_gene.toLowerCase().includes(geneFilter) || 
+                            variant.snpeff_gene.toLowerCase().includes(geneFilter)) &&
+                        (variant.depth >= depthFilter);
+                } else {
+                    return (!chrFilter || variant.chromosome === chrFilter) &&
+                        (!impactFilter || variant.vep_impact === impactFilter || variant.snpeff_impact === impactFilter) &&
+                        (!geneFilter || 
+                            variant.vep_gene.toLowerCase().includes(geneFilter) || 
+                            variant.snpeff_gene.toLowerCase().includes(geneFilter)) &&
+                        (variant.depth >= depthFilter);
+                }                
             });
             
             updateTable();
