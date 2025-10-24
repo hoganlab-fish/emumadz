@@ -320,17 +320,14 @@
             text-align: left;
             border-radius: 6px;
             padding: 10px;
-            position: absolute; 
+            position: fixed;
             z-index: 10000;
-            bottom: 125%;
-            left: 50%;
-            transform: translateX(-50%); /* Use transform instead of margin-left */
             opacity: 0;
             transition: opacity 0.3s;
             font-size: 0.85em;
             line-height: 1.4;
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            white-space: normal; 
+            pointer-events: none;
         }
 
         .tooltip-text::after {
@@ -347,7 +344,7 @@
         .tooltip-container:hover .tooltip-text {
             visibility: visible;
             opacity: 1;
-        }        
+        }      
     </style>
 </head>
 <body>
@@ -662,7 +659,21 @@
         let igvBrowser = null;
         let fileList = [];
         let genomeConfig = null;
-        
+
+        document.querySelectorAll('.tooltip-container').forEach(container => {
+            const icon = container.querySelector('.tooltip-icon');
+            const tooltip = container.querySelector('.tooltip-text');
+            
+            container.addEventListener('mouseenter', function() {
+                const rect = icon.getBoundingClientRect();
+                
+                // Position tooltip above and centered on icon
+                tooltip.style.left = (rect.left + rect.width / 2) + 'px';
+                tooltip.style.top = (rect.top - 10) + 'px';
+                tooltip.style.transform = 'translate(-50%, -100%)';
+            });
+        });        
+
         // Auto-load file list on page load
         window.addEventListener('load', loadFileList);
         
