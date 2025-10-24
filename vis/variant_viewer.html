@@ -320,17 +320,17 @@
             text-align: left;
             border-radius: 6px;
             padding: 10px;
-            position: fixed;
-            z-index: 1000;
+            position: absolute; 
+            z-index: 10000;
             bottom: 125%;
             left: 50%;
-            margin-left: -125px;
+            transform: translateX(-50%); /* Use transform instead of margin-left */
             opacity: 0;
             transition: opacity 0.3s;
             font-size: 0.85em;
             line-height: 1.4;
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            z-index: 10000;
+            white-space: normal; 
         }
 
         .tooltip-text::after {
