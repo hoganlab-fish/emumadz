@@ -574,14 +574,14 @@ class VCFParser:
                     f"{ref_sample_id}_reference.bam" 
                     for ref_sample_id in self.reference_samples.keys()
                 ]
-            
+
             # Get full annotations as JSON strings
             vep_full = json.dumps(vep_annotations) if vep_annotations else ''
             snpeff_full = json.dumps(snpeff_annotations) if snpeff_annotations else ''
             
             # Generate BAM subset filenames (will be converted to relative paths later)
             mutant_bam_filename = f"{sample_name}_mutant.bam" if subset_path else ""
-            
+
             variant_data = {
                 'variant_id': variant_id,
                 'chromosome': record.chrom,
@@ -636,12 +636,13 @@ class VCFParser:
             )
 
             # Update reference BAM paths to relative paths
-            data['reference_bam_files'] = data['reference_bam_files'].apply(
-                lambda x: '|'.join([
-                    self.get_relative_bam_file(output_file, ref_path, subset_path) 
-                    for ref_path in x.split('|') if ref_path
-                ]) if x else ''
-            )
+            for ref in ["reference_bam_files", "reference_bam_paths"]:
+                data[ref] = data[ref].apply(
+                    lambda x: '|'.join([
+                        self.get_relative_bam_file(output_file, ref_path, subset_path) 
+                        for ref_path in x.split('|') if ref_path
+                    ]) if x else ''
+                )
 
             # Generate coverage report if requested
             if coverage_report:
