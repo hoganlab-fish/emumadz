@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from functools import partial
 from multiprocessing import Pool
 from typing import Dict, List, Tuple
+import numpy as np
 import pandas as pd
 import pysam
 from tqdm import tqdm
@@ -91,6 +92,37 @@ def bedgraph_to_tdf(bedgraph_file: str, genome_file: str, output_tdf: str) -> bo
     except FileNotFoundError:
         print("IGV tools not found - keeping bedgraph format")
         return False
+
+def sigmoid_transform(score, k: int=8, x0: float=0.3, normalise: bool=True):
+    """
+    Sigmoid transformation to enhance contrast between signal and noise
+
+        k=5, x0=0.3 - Gentle transition
+        k=8, x0=0.3 - Moderate transition
+        k=12, x0=0.2 - Sharp transition
+        
+    :param score: input score (0.0 to 1.0)
+    :type score: float
+    :param k: steepness of the curve (higher = sharper transition)
+    :type k: int
+    :param x0: midpoint where transition occurs (0.0 to 1.0)
+    :type x0: float
+    :param normalise:
+    :type bool: True
+    :return: transformed score (0.0 to 1.0)
+    :rtype: float
+    """
+    if score <= 0:
+        return 0.0
+    if score >= 1:
+        return 1.0
+    
+    # Apply sigmoid transformation
+    if normalise is True:
+        normalised = (score - x0) * 2
+        return 1 / (1 + np.exp(-k * normalised))
+    else:
+        return 1 / (1 + np.exp(-k * (score - x0)))
 
 class HomozygosityScorer(ABC):
     """Abstract base class for homozygosity scoring methods"""
@@ -231,13 +263,17 @@ class HomozygosityAnalyser:
     def __init__(self, scorer: HomozygosityScorer, 
                  window_size: int = 10000, step_size: int = 1000,
                  use_snp_windows: bool = False, snp_window_size: int = 200, 
-                 snp_step_size: int = 20):
+                 snp_step_size: int = 20, sigmoid: dict = {"k": 8, "x0": 0.3},
+                 normalise: bool = False):
         self.scorer = scorer
         self.window_size = window_size
         self.step_size = step_size
         self.use_snp_windows = use_snp_windows
         self.snp_window_size = snp_window_size
         self.snp_step_size = snp_step_size
+        self.k = sigmoid["k"]
+        self.x0 = sigmoid["x0"]
+        self.normalise = normalise
         self.total = None
         
         self._validate_config()
@@ -321,6 +357,9 @@ class HomozygosityAnalyser:
                     continue
                 
                 score = self.scorer.calculate_score(record, variant, sample_name, ref_samples)
+
+                if self.k or self.x0:
+                    score = sigmoid_transform(score, self.k, self.x0, self.normalise)
                 
                 if score > 0:
                     variant_scores.append({
@@ -504,6 +543,14 @@ def main():
     parser.add_argument('--snp-step-size', type=int, default=20,
                        help='SNP step size')
     
+    # Transform options
+    parser.add_argument('-k', type=int, default=5,
+                        help='Sigmoid function steepness')
+    parser.add_argument('-x', type=float, default=0.3,
+                        help='Sigmoid function steepness')
+    parser.add_argument('--normalise', action='store_true',
+                        help='Normalise sigmoid function (default: False)')
+    
     # General options
     parser.add_argument('--all-variants', action='store_true',
                        help='Include all variants (default: SNPs only)')
@@ -536,7 +583,9 @@ def main():
             step_size=args.step_size,
             use_snp_windows=args.use_snp_windows,
             snp_window_size=args.snp_window_size,
-            snp_step_size=args.snp_step_size
+            snp_step_size=args.snp_step_size,
+            sigmoid={"k": args.k, "x0": args.x0},
+            normalise=args.normalise
         )
         
         # Process VCF
