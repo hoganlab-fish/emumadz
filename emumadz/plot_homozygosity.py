@@ -55,19 +55,20 @@ def parse_allele_depths(ad_field) -> List[int]:
     except (ValueError, AttributeError) as e:
         raise HomozygosityError(f"Invalid AD format: {ad_field}") from e
 
-def bedgraph_to_tdf(bedgraph_file: str, genome_file: str, output_tdf: str) -> bool:
+def bedgraph_to_tdf(bedgraph_file: str, chrom_sizes: str, output_tdf: str) -> bool:
     """
     Convert bedgraph to TDF using IGV tools.
 
     :param bedgraph_file: Input bedgraph file path
     :type bedgraph_file: str
-    :param genome_file: Genome .fai file path
-    :type genome_file: str
+    :param chrom_sizes: Genome .fai file path
+    :type chrom_sizes: str
     :param output_tdf: Output TDF file path
     :type output_tdf: str
     :return: True if successful, False otherwise
     :rtype: bool
     """
+
     try:
         # Check if igvtools is available
         subprocess.run(['igvtools'], capture_output=True, check=False)
@@ -77,7 +78,7 @@ def bedgraph_to_tdf(bedgraph_file: str, genome_file: str, output_tdf: str) -> bo
             'igvtools', 'toTDF',
             bedgraph_file,
             output_tdf,
-            genome_file
+            chrom_sizes
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -526,21 +527,21 @@ def main():
                        default='mut_vs_ref', help='Homozygosity scoring method')
     parser.add_argument('-t', '--threshold', type=float, default=0.9,
                        help='Threshold for allele_depth scorer')
-    parser.add_argument('-c', '--min-coverage', type=int, default=1,
+    parser.add_argument('-c', '--min_coverage', type=int, default=1,
                        help='Minimum coverage for mut_vs_ref scorer')
-    parser.add_argument('--require-all-coverage', action='store_true',
+    parser.add_argument('--require_all_coverage', action='store_true',
                        help='Require all reference samples meet min coverage')
     
     # Window options
-    parser.add_argument('-w', '--window-size', type=int, default=10000,
+    parser.add_argument('-w', '--window_size', type=int, default=10000,
                        help='Window size (bp or SNP count)')
-    parser.add_argument('--step-size', type=int, default=1000,
+    parser.add_argument('--step_size', type=int, default=1000,
                        help='Step size (bp or SNP count)')
-    parser.add_argument('--use-snp-windows', action='store_true',
+    parser.add_argument('--use_snp_windows', action='store_true',
                        help='Use SNP-count windows instead of bp windows')
-    parser.add_argument('--snp-window-size', type=int, default=200,
+    parser.add_argument('--snp_window_size', type=int, default=200,
                        help='SNP window size')
-    parser.add_argument('--snp-step-size', type=int, default=20,
+    parser.add_argument('--snp_step_size', type=int, default=20,
                        help='SNP step size')
     
     # Transform options
@@ -552,10 +553,10 @@ def main():
                         help='Normalise sigmoid function (default: False)')
     
     # General options
-    parser.add_argument('--all-variants', action='store_true',
+    parser.add_argument('--all_variants', action='store_true',
                        help='Include all variants (default: SNPs only)')
-    parser.add_argument('-i', '--fasta-index', type=str, default=None,
-                       help='Path to fasta.fai index (if absent, skip tdf generation)')
+    parser.add_argument('-i', '--chrom_sizes', type=str, default=None,
+                       help='Path to chromosome sizes (col 1,2 of fasta.fai). If absent, skip tdf generation)')
     parser.add_argument('-n', '--ncpu', type=int, default=8,
                         help="Number of cpus (ideally one per chr)")
     parser.add_argument('-v', '--verbose', action='store_true')
@@ -584,7 +585,7 @@ def main():
             use_snp_windows=args.use_snp_windows,
             snp_window_size=args.snp_window_size,
             snp_step_size=args.snp_step_size,
-            sigmoid={"k": args.k, "x0": args.x0},
+            sigmoid={"k": args.k, "x0": args.x},
             normalise=args.normalise
         )
         
@@ -605,18 +606,18 @@ def main():
                       f"{sample_name}_{scorer.get_name()}", 
                       "Per-variant homozygosity scores")
         
-        if args.fasta_index:
+        if args.chrom_sizes:
             variant_tdf = variant_file.replace(".bedgraph", ".tdf")
-            bedgraph_to_tdf(variant_file, args.fasta_index, variant_tdf)
+            bedgraph_to_tdf(variant_file, args.chrom_sizes, variant_tdf)
         
         if not windowed_df.empty:
             window_type = "SNP" if args.use_snp_windows else "BP"
             write_bedgraph(windowed_df, window_file,
                           f"{sample_name}_{scorer.get_name()}_windowed",
                           f"Windowed homozygosity ({window_type} windows)")
-            if args.fasta_index:
+            if args.chrom_sizes:
                 window_tdf = window_file.replace(".bedgraph", ".tdf")
-                bedgraph_to_tdf(window_file, args.fasta_index, window_tdf)            
+                bedgraph_to_tdf(window_file, args.chrom_sizes, window_tdf)            
         
         print(f"\nGenerated files:")
         print(f"  - {variant_file}")
