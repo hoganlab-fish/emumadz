@@ -55,14 +55,14 @@ def parse_allele_depths(ad_field) -> List[int]:
     except (ValueError, AttributeError) as e:
         raise HomozygosityError(f"Invalid AD format: {ad_field}") from e
 
-def bedgraph_to_tdf(bedgraph_file: str, chrom_sizes: str, output_tdf: str) -> bool:
+def bedgraph_to_tdf(bedgraph_file: str, fasta_index: str, output_tdf: str) -> bool:
     """
     Convert bedgraph to TDF using IGV tools.
 
     :param bedgraph_file: Input bedgraph file path
     :type bedgraph_file: str
-    :param chrom_sizes: Genome .fai file path
-    :type chrom_sizes: str
+    :param fasta_index: Genome .fai file path
+    :type fasta_index: str
     :param output_tdf: Output TDF file path
     :type output_tdf: str
     :return: True if successful, False otherwise
@@ -78,7 +78,7 @@ def bedgraph_to_tdf(bedgraph_file: str, chrom_sizes: str, output_tdf: str) -> bo
             'igvtools', 'toTDF',
             bedgraph_file,
             output_tdf,
-            chrom_sizes
+            fasta_index
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -555,8 +555,8 @@ def main():
     # General options
     parser.add_argument('--all_variants', action='store_true',
                        help='Include all variants (default: SNPs only)')
-    parser.add_argument('-i', '--chrom_sizes', type=str, default=None,
-                       help='Path to chromosome sizes (col 1,2 of fasta.fai). If absent, skip tdf generation)')
+    parser.add_argument('-i', '--fasta_index', type=str, default=None,
+                       help='Path to genome index fasta.fai (if absent, skip tdf generation)')
     parser.add_argument('-n', '--ncpu', type=int, default=8,
                         help="Number of cpus (ideally one per chr)")
     parser.add_argument('-v', '--verbose', action='store_true')
@@ -606,18 +606,18 @@ def main():
                       f"{sample_name}_{scorer.get_name()}", 
                       "Per-variant homozygosity scores")
         
-        if args.chrom_sizes:
+        if args.fasta_index:
             variant_tdf = variant_file.replace(".bedgraph", ".tdf")
-            bedgraph_to_tdf(variant_file, args.chrom_sizes, variant_tdf)
+            bedgraph_to_tdf(variant_file, args.fasta_index, variant_tdf)
         
         if not windowed_df.empty:
             window_type = "SNP" if args.use_snp_windows else "BP"
             write_bedgraph(windowed_df, window_file,
                           f"{sample_name}_{scorer.get_name()}_windowed",
                           f"Windowed homozygosity ({window_type} windows)")
-            if args.chrom_sizes:
+            if args.fasta_index:
                 window_tdf = window_file.replace(".bedgraph", ".tdf")
-                bedgraph_to_tdf(window_file, args.chrom_sizes, window_tdf)            
+                bedgraph_to_tdf(window_file, args.fasta_index, window_tdf)            
         
         print(f"\nGenerated files:")
         print(f"  - {variant_file}")
