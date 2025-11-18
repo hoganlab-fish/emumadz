@@ -190,7 +190,7 @@ class AlleleDepthScorer(HomozygosityScorer):
 
 
 class MutantReferenceScorer(HomozygosityScorer):
-    """Mutant vs reference pool comparison scorer"""
+    """Mutant vs reference pool(s) comparison scorer - counts informative positions"""
     
     def __init__(self, min_coverage: int = 1, require_all_coverage: bool = False):
         self.min_coverage = min_coverage
@@ -205,9 +205,16 @@ class MutantReferenceScorer(HomozygosityScorer):
         return True
     
     def calculate_score(self, record, variant: VariantData, sample_name: str, 
-                       ref_samples: List[str]) -> float:
+                       ref_samples: List[str]) -> Dict[str, int]:
+        """Returns a dict of counts for window aggregation"""
         if not ref_samples:
             raise ValueError("MutantReferenceScorer requires reference samples")
+        
+        counts = {
+            'mut_is_het': 0,
+            'ref_is_het': 0,
+            'mut_is_hom_inf': 0
+        }
         
         try:
             # Get mutant sample data
@@ -216,10 +223,18 @@ class MutantReferenceScorer(HomozygosityScorer):
             mutant_total = sum(mutant_depths)
             
             if mutant_total < self.min_coverage:
-                return 0.0
+                return counts
             
-            # Process reference samples
-            ref_alt_fractions = []
+            # Get mutant covered alleles (indices where depth > 0)
+            mutant_covered = set(i for i, d in enumerate(mutant_depths) if d > 0)
+            
+            # Check if mutant is heterozygous
+            if len(mutant_covered) > 1:
+                counts['mut_is_het'] = 1
+            
+            # Aggregate coverage across ALL reference samples
+            ref_combined_covered = set()
+            ref_valid = False
             
             for ref_sample in ref_samples:
                 try:
@@ -229,44 +244,42 @@ class MutantReferenceScorer(HomozygosityScorer):
                     
                     if ref_total < self.min_coverage:
                         if self.require_all_coverage:
-                            return 0.0
+                            return counts
                         continue
                     
-                    # Calculate alt allele fraction
-                    ref_alt_fraction = sum(ref_depths[1:]) / ref_total if len(ref_depths) > 1 else 0.0
-                    ref_alt_fractions.append(ref_alt_fraction)
+                    # Union of covered alleles across all references
+                    ref_covered = set(i for i, d in enumerate(ref_depths) if d > 0)
+                    ref_combined_covered.update(ref_covered)
+                    ref_valid = True
                     
                 except HomozygosityError:
                     if self.require_all_coverage:
-                        return 0.0
+                        return counts
                     continue
             
-            if not ref_alt_fractions:
-                return 0.0
+            if not ref_valid:
+                return counts
             
-            # Calculate score
-            mutant_alt_fraction = sum(mutant_depths[1:]) / mutant_total if len(mutant_depths) > 1 else 0.0
-            avg_ref_alt_fraction = sum(ref_alt_fractions) / len(ref_alt_fractions)
-
-            # Ratio-based scoring (better for large fold-changes)
-            epsilon = 0.01  # Prevent division by zero
-            ratio = mutant_alt_fraction / (avg_ref_alt_fraction + epsilon)
-
-            # For homozygosity mapping, we want high mutant, low ref
-            # ratio > 1 means mutant has more alt allele than reference
-            if ratio > 1:
-                # Scale: ratio of 2 = 0.5, ratio of 10 = 0.9, ratio of 100 = 0.99
-                score = 1 - (1 / ratio)
-            else:
-                score = 0.0
-
-            return max(0.0, min(1.0, score))            
+            # Check if combined references are heterozygous
+            if len(ref_combined_covered) > 1:
+                counts['ref_is_het'] = 1
+            
+            # Check if mutant is homozygous informative:
+            # - mutant has exactly 1 allele (homozygous)
+            # - references combined are heterozygous (> 1 allele)
+            # - mutant's allele is present in references
+            if len(mutant_covered) == 1 and len(ref_combined_covered) > 1:
+                mutant_allele = list(mutant_covered)[0]
+                if mutant_allele in ref_combined_covered:
+                    counts['mut_is_hom_inf'] = 1
+            
+            return counts
             
         except HomozygosityError:
-            return 0.0
+            return counts
     
     def get_name(self) -> str:
-        return f"mut_vs_ref_cov{self.min_coverage}"
+        return f"mutant_ref_cov{self.min_coverage}"
 
 
 class HomozygosityAnalyser:
@@ -350,7 +363,8 @@ class HomozygosityAnalyser:
         """Process single chromosome and return variants + windows"""
         sample_name, ref_samples = self._infer_samples(vcf_path)
         
-        variant_scores = []
+        variant_data = []
+        
         with pysam.VariantFile(vcf_path) as vcf:
             for record in vcf:
                 if record.chrom != chrom:
@@ -368,27 +382,27 @@ class HomozygosityAnalyser:
                 if not all_variants and not variant.is_snp:
                     continue
                 
-                score = self.scorer.calculate_score(record, variant, sample_name, ref_samples)
-
-                if self.k or self.x0:
-                    score = sigmoid_transform(score, self.k, self.x0, self.normalise)
+                result = self.scorer.calculate_score(record, variant, sample_name, ref_samples)
                 
-                if score > 0:
-                    variant_scores.append({
+                if isinstance(result, dict):
+                    variant_data.append({
                         'chrom': variant.chrom,
                         'pos': variant.pos,
-                        'score': score,
-                        'is_snp': variant.is_snp
+                        **result
+                    })
+                elif result > 0:
+                    variant_data.append({
+                        'chrom': variant.chrom,
+                        'pos': variant.pos,
+                        'score': result
                     })
         
-        if not variant_scores:
+        if not variant_data:
             return pd.DataFrame(), pd.DataFrame()
         
-        # Convert to DataFrame and deduplicate
-        variants_df = pd.DataFrame(variant_scores)
-        variants_df = variants_df.groupby(['chrom', 'pos'], as_index=False)['score'].max()
+        variants_df = pd.DataFrame(variant_data)
         
-        # Generate windows for this chromosome
+        # Generate windows
         windowed_df = self._generate_windows_single_chrom(variants_df)
         
         return variants_df, windowed_df
@@ -446,13 +460,89 @@ class HomozygosityAnalyser:
                     raise ValueError(f"Reference sample {ref} not found in VCF. Available: {samples}")
 
     def _generate_windows_single_chrom(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate windows for single chromosome"""
-        if self.use_snp_windows:
-            return self._generate_snp_windows_single_chrom(variants_df)
+        """Generate windows for single chromosome - handles both count and score types"""
+        if variants_df.empty:
+            return pd.DataFrame()
+        
+        # Check if this is count-based or score-based
+        is_count_based = 'mut_is_het' in variants_df.columns
+        
+        if is_count_based:
+            return self._generate_windows_counts(variants_df)
         else:
-            return self._generate_bp_windows_single_chrom(variants_df)
+            return self._generate_windows_scores(variants_df)
 
-    def _generate_bp_windows_single_chrom(self, variants_df: pd.DataFrame) -> pd.DataFrame:
+    def _generate_windows_counts(self, variants_df: pd.DataFrame) -> pd.DataFrame:
+        """Generate windows using count-based scoring (original algorithm)"""
+        windowed_data = []
+        chrom = variants_df['chrom'].iloc[0]
+        chrom_data = variants_df.sort_values('pos')
+        
+        min_pos = int(chrom_data['pos'].min())
+        max_pos = int(chrom_data['pos'].max())
+        
+        window_start = min_pos
+        while window_start < max_pos:
+            window_end = min(window_start + self.window_size, max_pos + 1)
+            
+            window_variants = chrom_data[
+                (chrom_data['pos'] >= window_start) & 
+                (chrom_data['pos'] < window_end)
+            ]
+            
+            if len(window_variants) > 0:
+                # Sum counts across window, add 1 pseudocount
+                ref_is_het = window_variants['ref_is_het'].sum() + 1
+                mut_is_het = window_variants['mut_is_het'].sum() + 1
+                mut_is_hom_inf = window_variants['mut_is_hom_inf'].sum() + 1
+                
+                # Original formula: (ref_het / mut_het) * mut_hom_inf
+                score = (float(ref_is_het) / float(mut_is_het)) * float(mut_is_hom_inf)
+                
+                windowed_data.append({
+                    'chrom': chrom,
+                    'start': window_start,
+                    'end': window_end,
+                    'score': score,
+                    'variant_count': len(window_variants)
+                })
+            
+            window_start += self.step_size
+        
+        return pd.DataFrame(windowed_data)
+
+    def _generate_windows_scores(self, variants_df: pd.DataFrame) -> pd.DataFrame:
+        """Generate windows using score averaging (for fraction-based scorers)"""
+        windowed_data = []
+        chrom = variants_df['chrom'].iloc[0]
+        chrom_data = variants_df.sort_values('pos')
+        
+        min_pos = int(chrom_data['pos'].min())
+        max_pos = int(chrom_data['pos'].max())
+        
+        window_start = min_pos
+        while window_start < max_pos:
+            window_end = min(window_start + self.window_size, max_pos + 1)
+            
+            window_variants = chrom_data[
+                (chrom_data['pos'] >= window_start) & 
+                (chrom_data['pos'] < window_end)
+            ]
+            
+            if len(window_variants) > 0:
+                windowed_data.append({
+                    'chrom': chrom,
+                    'start': window_start,
+                    'end': window_end,
+                    'score': window_variants['score'].mean(),
+                    'variant_count': len(window_variants)
+                })
+            
+            window_start += self.step_size
+        
+        return pd.DataFrame(windowed_data)
+
+    def __generate_bp_windows_single_chrom(self, variants_df: pd.DataFrame) -> pd.DataFrame:
         """Generate BP windows for single chromosome"""
         if variants_df.empty:
             return pd.DataFrame()
@@ -486,7 +576,7 @@ class HomozygosityAnalyser:
         
         return pd.DataFrame(windowed_data)
 
-    def _generate_snp_windows_single_chrom(self, variants_df: pd.DataFrame) -> pd.DataFrame:
+    def __generate_snp_windows_single_chrom(self, variants_df: pd.DataFrame) -> pd.DataFrame:
         """Generate SNP windows for single chromosome"""
         if variants_df.empty or len(variants_df) < self.snp_window_size:
             return pd.DataFrame()
@@ -534,15 +624,15 @@ def main():
     parser.add_argument('output_prefix', help='Output file prefix')
     
     # Scorer options
-    parser.add_argument('--scorer', choices=['allele_depth', 'mut_vs_ref'], 
-                       default='mut_vs_ref', help='Homozygosity scoring method')
+    parser.add_argument('--scorer', choices=['allele_depth', 'mutant_reference'], 
+                       default='mutant_reference', help='Homozygosity scoring method')
     parser.add_argument('-t', '--threshold', type=float, default=0.9,
                        help='Threshold for allele_depth scorer')
     parser.add_argument('-c', '--min_coverage', type=int, default=1,
-                       help='Minimum coverage for mut_vs_ref scorer')
+                       help='Minimum coverage for mutant_reference scorer')
     parser.add_argument('--require_all_coverage', action='store_true',
                        help='Require all reference samples meet min coverage')
-    
+
     # Window options
     parser.add_argument('-w', '--window_size', type=int, default=10000,
                        help='Window size (bp or SNP count)')
@@ -583,8 +673,10 @@ def main():
         if args.scorer == 'allele_depth':
             scorer = AlleleDepthScorer(threshold=args.threshold)
         elif args.scorer == 'mut_vs_ref':
-            scorer = MutantReferenceScorer(min_coverage=args.min_coverage,
-                                       require_all_coverage=args.require_all_coverage)
+            scorer = MutantReferenceScorer(
+                min_coverage=args.min_coverage,
+                require_all_coverage=args.require_all_coverage
+                )
         else:
             raise ValueError(f"Unknown scorer: {args.scorer}")
         
