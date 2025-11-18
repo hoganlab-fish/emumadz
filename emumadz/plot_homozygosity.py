@@ -672,7 +672,7 @@ def main():
         # Create scorer
         if args.scorer == 'allele_depth':
             scorer = AlleleDepthScorer(threshold=args.threshold)
-        elif args.scorer == 'mut_vs_ref':
+        elif args.scorer == 'mutant_reference':
             scorer = MutantReferenceScorer(
                 min_coverage=args.min_coverage,
                 require_all_coverage=args.require_all_coverage
