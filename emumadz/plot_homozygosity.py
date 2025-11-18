@@ -556,10 +556,10 @@ def main():
                        help='SNP step size')
     
     # Transform options
-    parser.add_argument('-k', type=int, default=5,
-                        help='Sigmoid function steepness')
-    parser.add_argument('-x', type=float, default=0.3,
-                        help='Sigmoid function steepness')
+    parser.add_argument('-k', type=int, default=None,
+                        help='Sigmoid function steepness (try starting with 8)')
+    parser.add_argument('-x', type=float, default=None,
+                        help='Sigmoid function steepness (try starting with 0.3)')
     parser.add_argument('--normalise', action='store_true',
                         help='Normalise sigmoid function (default: False)')
     
