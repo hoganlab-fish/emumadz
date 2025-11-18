@@ -247,9 +247,20 @@ class MutantReferenceScorer(HomozygosityScorer):
             # Calculate score
             mutant_alt_fraction = sum(mutant_depths[1:]) / mutant_total if len(mutant_depths) > 1 else 0.0
             avg_ref_alt_fraction = sum(ref_alt_fractions) / len(ref_alt_fractions)
-            score = mutant_alt_fraction - avg_ref_alt_fraction
-            
-            return max(0.0, min(1.0, score))
+
+            # Ratio-based scoring (better for large fold-changes)
+            epsilon = 0.01  # Prevent division by zero
+            ratio = mutant_alt_fraction / (avg_ref_alt_fraction + epsilon)
+
+            # For homozygosity mapping, we want high mutant, low ref
+            # ratio > 1 means mutant has more alt allele than reference
+            if ratio > 1:
+                # Scale: ratio of 2 = 0.5, ratio of 10 = 0.9, ratio of 100 = 0.99
+                score = 1 - (1 / ratio)
+            else:
+                score = 0.0
+
+            return max(0.0, min(1.0, score))            
             
         except HomozygosityError:
             return 0.0
