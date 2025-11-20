@@ -7,12 +7,11 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import os
 import sys
-sys.path.insert(0, os.path.abspath("../"))
-
+# sys.path.insert(0, os.path.abspath("../"))
 
 project = 'EMUMADZ'
 # Enhanced MUtation MApping and Detection in Zebrafish
-# '2025, Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Scott Paterson, Oguzhan Baltaci, Cas Simons, Jason Li, Benjamin Hogan'
+# '2025, Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Scott Paterson, Oguzhan Baltaci, Cas Simons, Jason Li, Andrew Cox, Kelly Smith, Benjamin Hogan'
 
 release = '0.2.0'
 
@@ -25,12 +24,14 @@ authors = [
     ("Scott Paterson",  "0000-0000-0000-0000"),
     ("Oguzhan Baltaci", "0009-0001-5651-1331"),
     ("Cas Simons",      "0000-0003-3147-8042"),
-    ("Jason Li",        "0000-0002-1150-3549"),
+    ("Jason Li",        "0000-0002-1150-3549"), 
+    ("Andrew Cox",      "0000-0003-4189-9422"), 
+    ("Kelly Smith",     "0000-0002-8283-9760"), 
     ("Benjamin Hogan",  "0000-0002-0651-7065"),
 ]
 
-def add_orcid(author_name, orcid):
-    return f'<a href="https://orcid.org/{orcid}">{author_name} <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, '
+# def add_orcid(author_name, orcid):
+#     return f'<a href="https://orcid.org/{orcid}">{author_name} <img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>, '
 
 # Set author and copyright fields
 author = ",\n".join([x for x, y in authors])
