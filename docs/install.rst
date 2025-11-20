@@ -70,7 +70,7 @@ First, install `conda`, `mamba` or `micromamba`. You can find install instructio
 
 Install the provided `conda` environment.
 
-*eventual conda package (optional, priority is above)*
+*to be written.*
 
 Manual
 ++++++
