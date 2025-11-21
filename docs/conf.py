@@ -7,8 +7,12 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import os
 from pathlib import Path
+import subprocess
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# install emumadz as a package to enable api parsing
+subprocess.check_call(['pip', 'install', '-e', '..'])
 
 project = 'EMUMADZ'
 # Enhanced MUtation MApping and Detection in Zebrafish
