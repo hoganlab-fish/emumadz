@@ -6,8 +6,9 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import os
+from pathlib import Path
 import sys
-sys.path.insert(0, os.path.abspath("../emumadz/"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 project = 'EMUMADZ'
 # Enhanced MUtation MApping and Detection in Zebrafish
