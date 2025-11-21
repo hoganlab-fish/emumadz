@@ -5,7 +5,7 @@ setup(
     name="emumadz",
     version="0.2.0",
     packages=["emumadz"],
-    package_dir={"": "emumadz"},
+    package_dir={"../": "emumadz"},
     entry_points={
         'console_scripts': [
             'emumadz=emumadz.parse_vcf:main',
