@@ -18,7 +18,6 @@ setup(
         "numpy",
         "pandas",
         "pysam",
-        "pyvcf",
         "tqdm",
     ],
     author="Tyrone Chen",
