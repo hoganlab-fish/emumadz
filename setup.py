@@ -1,10 +1,10 @@
 #!/usr/bin/python
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(
     name="emumadz",
     version="0.2.0",
-    packages=find_packages(),
+    packages=["emumadz"],
     package_dir={"": "emumadz"},
     entry_points={
         'console_scripts': [
