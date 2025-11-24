@@ -925,6 +925,18 @@ Our ``html`` file calls the local script.
     <script src="/api/igv-proxy/igv.min.js"></script>
     <link rel="stylesheet" href="/api/igv-proxy/igv.css">
 
+Secure hosting
+**************
+
+To set up a ``https`` secure host:
+
+1. Obtain a free domain name at ``duckdns``
+2. Apply ``certbot`` to generate a SSL certificate
+3. Setup a ``nginx`` configuration.
+
+.. note::
+    This is highly user-specific, and will change depending on your level of access to the host server, file location and open port(s). For this reason, no specific instructions are provided. However, following the instructions for each of the above three services should work in most scenarios.
+
 Custom genome
 *************
 
