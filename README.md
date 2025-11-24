@@ -1,4 +1,4 @@
-[![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
+![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 ![CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg?style=for-the-badge)
 ![GitHub](https://img.shields.io/badge/GitHub-hoganlab--fish%2Femumadz-181717?style=for-the-badge&logo=github&logoColor=white)
 ![](https://app.readthedocs.org/projects/emumadz/badge/?version=latest&style=for-the-badge)
