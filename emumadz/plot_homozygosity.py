@@ -1,53 +1,44 @@
 #!/usr/bin/env python3
-# loads a vcf with annotations, create a tdf file of mutation hotspots
+"""
+Identifies regions where mutant is homozygous while references are heterozygous.
+Uses: https://doi.org/10.1016/j.ymeth.2013.05.015
+"""
 import argparse
-import logging
 import subprocess
-import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import partial
 from multiprocessing import Pool
 from typing import Dict, List, Tuple
-import numpy as np
+
 import pandas as pd
 import pysam
 from tqdm import tqdm
+
 
 @dataclass
 class VariantData:
     """Container for variant information"""
     chrom: str
     pos: int
-    ref: str
-    alts: List[str]
     is_snp: bool
     
     def get_sample_data(self, record, sample_name: str) -> Dict:
         """Get sample data on demand"""
         return dict(record.samples[sample_name])
 
-
 class HomozygosityError(Exception):
     """Custom exception for homozygosity analysis errors"""
     pass
-
 
 def parse_allele_depths(ad_field) -> List[int]:
     """Parse AD field with comprehensive error handling"""
     if not ad_field or ad_field == '.' or ad_field is None:
         raise HomozygosityError("Missing AD field")
-    # handle cases of (1,2,None)
     try:
         if isinstance(ad_field, (list, tuple)):
-            depths = []
-            for x in ad_field:
-                if x is None:
-                    depths.append(0)  # Treat None as zero depth
-                else:
-                    depths.append(int(x))
-            return depths
+            return [int(x) if x is not None else 0 for x in ad_field]
         elif isinstance(ad_field, str):
             return [int(x) for x in ad_field.split(',')]
         else:
@@ -57,30 +48,27 @@ def parse_allele_depths(ad_field) -> List[int]:
 
 def bedgraph_to_tdf(bedgraph_file: str, fasta_index: str, output_tdf: str) -> bool:
     """
-    Convert bedgraph to TDF using IGV tools.
-
-    :param bedgraph_file: Input bedgraph file path
-    :type bedgraph_file: str
-    :param fasta_index: Genome .fai file path
-    :type fasta_index: str
-    :param output_tdf: Output TDF file path
-    :type output_tdf: str
-    :return: True if successful, False otherwise
-    :rtype: bool
+    Convert bedgraph to TDF (Tiled Data Format) for efficient IGV visualization.
+    
+    TDF is a binary format that loads much faster than text bedgraph for large
+    genomic datasets. Requires IGVTools to be installed and in PATH.
+    
+    Args:
+        bedgraph_file: Input bedgraph file path
+        fasta_index: Reference genome .fai index file (e.g., hg38.fa.fai)
+        output_tdf: Output TDF file path
+    
+    Returns:
+        True if conversion succeeded, False if IGVTools not available or failed
+    
+    Example:
+        >>> success = bedgraph_to_tdf("scores.bedgraph", "genome.fa.fai", "scores.tdf")
+        >>> if success:
+        ...     print("Load scores.tdf in IGV for visualization")
     """
-
     try:
-        # Check if igvtools is available
         subprocess.run(['igvtools'], capture_output=True, check=False)
-        
-        # Convert to TDF
-        cmd = [
-            'igvtools', 'toTDF',
-            bedgraph_file,
-            output_tdf,
-            fasta_index
-        ]
-        
+        cmd = ['igvtools', 'toTDF', bedgraph_file, output_tdf, fasta_index]
         result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.returncode == 0:
@@ -89,612 +77,405 @@ def bedgraph_to_tdf(bedgraph_file: str, fasta_index: str, output_tdf: str) -> bo
         else:
             print(f"IGV tools error: {result.stderr}")
             return False
-            
     except FileNotFoundError:
-        print("IGV tools not found - keeping bedgraph format")
+        print("IGV tools not found - keeping bedgraph format only")
         return False
-
-def sigmoid_transform(score, k: int=8, x0: float=0.3, normalise: bool=True):
-    """
-    Sigmoid transformation to enhance contrast between signal and noise
-
-        k=5, x0=0.3 - Gentle transition
-        k=8, x0=0.3 - Moderate transition
-        k=12, x0=0.2 - Sharp transition
-        
-    :param score: input score (0.0 to 1.0)
-    :type score: float
-    :param k: steepness of the curve (higher = sharper transition)
-    :type k: int
-    :param x0: midpoint where transition occurs (0.0 to 1.0)
-    :type x0: float
-    :param normalise:
-    :type bool: True
-    :return: transformed score (0.0 to 1.0)
-    :rtype: float
-    """
-    if score <= 0:
-        return 0.0
-    if score >= 1:
-        return 1.0
-    
-    # Apply sigmoid transformation
-    if normalise is True:
-        normalised = (score - x0) * 2
-        return 1 / (1 + np.exp(-k * normalised))
-    else:
-        return 1 / (1 + np.exp(-k * (score - x0)))
-
 class HomozygosityScorer(ABC):
     """Abstract base class for homozygosity scoring methods"""
     
     def __init__(self):
-        """Initialize scorer and validate configuration"""
         self._validate_config()
     
     @abstractmethod
     def _validate_config(self) -> None:
-        """Validate scorer configuration"""
         pass
     
     @abstractmethod
     def requires_references(self) -> bool:
-        """Whether this scorer requires reference samples"""
         pass
     
     @abstractmethod
     def calculate_score(self, record, variant: VariantData, sample_name: str, 
-                       ref_samples: List[str]) -> float:
-        """Calculate homozygosity score for a variant"""
+                       ref_samples: List[str]) -> Dict[str, int]:
         pass
     
     @abstractmethod
     def get_name(self) -> str:
-        """Return scorer name for output files"""
         pass
 
-
-class AlleleDepthScorer(HomozygosityScorer):
-    """Simple allele depth ratio scorer (original script 1 method)"""
+class HenkeScorer(HomozygosityScorer):
+    """
+    Scorer: (hom / het) × (missing_ref_alleles / present_ref_alleles)
     
-    def __init__(self, threshold: float = 0.9):
-        self.threshold = threshold
-        super().__init__()
+    Implements the Henke et al. (2013) mapping score formula, which identifies
+    regions where mutants are homozygous for alleles that differ from reference
+    strains. High scores indicate candidate linked regions.
     
-    def _validate_config(self) -> None:
-        if not 0.0 <= self.threshold <= 1.0:
-            raise ValueError(f"Threshold must be between 0.0 and 1.0, got {self.threshold}")
+    The score is calculated as:
+        (homozygous_SNPs / heterozygous_SNPs) × (ref_alleles_absent / ref_alleles_present)
     
-    def requires_references(self) -> bool:
-        return False
+    Attributes:
+        min_coverage: Minimum read depth required for a sample to be considered
+        homozygosity_threshold: Allele fraction threshold for "soft" homozygosity
+            (0.85 means ≥85% of reads support one allele counts as homozygous)
     
-    def calculate_score(self, record, variant: VariantData, sample_name: str, 
-                       ref_samples: List[str]) -> float:
-        sample_call = variant.get_sample_data(record, sample_name)
-        ad_values = sample_call.get('AD')
-        
-        try:
-            depths = parse_allele_depths(ad_values)
-            total_depth = sum(depths)
-            if total_depth == 0:
-                raise HomozygosityError("Zero total depth")
-            
-            max_allele_fraction = max(depths) / total_depth
-            return max_allele_fraction if max_allele_fraction >= self.threshold else 0.0
-            
-        except HomozygosityError:
-            return 0.0
+    Example:
+        scorer = HenkeScorer(min_coverage=10, homozygosity_threshold=0.85)
+    """
     
-    def get_name(self) -> str:
-        return f"allele_depth_t{self.threshold}"
-
-
-class MutantReferenceScorer(HomozygosityScorer):
-    """Mutant vs reference pool(s) comparison scorer - counts informative positions"""
-    
-    def __init__(self, min_coverage: int = 1, require_all_coverage: bool = False):
+    def __init__(self, min_coverage: int = 1, homozygosity_threshold: float = 0.85):
         self.min_coverage = min_coverage
-        self.require_all_coverage = require_all_coverage
+        self.homozygosity_threshold = homozygosity_threshold
         super().__init__()
     
     def _validate_config(self) -> None:
         if self.min_coverage < 1:
-            raise ValueError(f"Minimum coverage must be >= 1, got {self.min_coverage}")
+            raise ValueError(f"Min coverage must be >= 1, got {self.min_coverage}")
+        if not 0.5 <= self.homozygosity_threshold <= 1.0:
+            raise ValueError(f"Homozygosity threshold must be 0.5-1.0, got {self.homozygosity_threshold}")
     
     def requires_references(self) -> bool:
         return True
     
+    def _is_homozygous(self, covered: set, depths: List[int]) -> bool:
+        """
+        Determine if a genotype is homozygous using strict or soft thresholding.
+    
+        Strict homozygosity: Only one allele has any coverage
+        Soft homozygosity: One allele has ≥ homozygosity_threshold fraction of reads
+        
+        Args:
+            covered: Set of allele indices with non-zero coverage
+            depths: List of read depths per allele (e.g., [100, 5, 0])
+        
+        Returns:
+            True if genotype meets homozygosity criteria, False otherwise
+        
+        Example:
+            >>> scorer._is_homozygous({0, 1}, [95, 5, 0])  # 95% ref allele
+            True  # if threshold is 0.85
+        """
+        if len(covered) == 1:
+            return True
+        total = sum(depths)
+        return (max(depths) / total) >= self.homozygosity_threshold if total > 0 else False
+    
     def calculate_score(self, record, variant: VariantData, sample_name: str, 
                        ref_samples: List[str]) -> Dict[str, int]:
-        """Returns a dict of counts for window aggregation"""
-        if not ref_samples:
-            raise ValueError("MutantReferenceScorer requires reference samples")
+        """
+        Calculate per-variant homozygosity counts for window aggregation.
         
+        Examines one VCF record and returns count flags that are later summed
+        across genomic windows to compute the Henke score.
+        
+        Args:
+            record: pysam VCF record object
+            variant: VariantData container with position info
+            sample_name: Name of mutant sample
+            ref_samples: List of reference sample names
+        
+        Returns:
+            Dictionary with binary flags (0 or 1):
+                - mut_is_hom: 1 if mutant is homozygous
+                - mut_is_het: 1 if mutant is heterozygous
+                - mut_has_map: 1 if all reference alleles present in mutant
+                - mut_miss_map: 1 if any reference alleles missing from mutant
+        
+        Example:
+            >>> counts = scorer.calculate_score(record, variant, "mutant1", ["ref1", "ref2"])
+            >>> counts
+            {'mut_is_hom': 1, 'mut_is_het': 0, 'mut_has_map': 0, 'mut_miss_map': 1}
+        """
         counts = {
+            'mut_is_hom': 0,
             'mut_is_het': 0,
-            'ref_is_het': 0,
-            'mut_is_hom_inf': 0
+            'mut_has_map': 0,
+            'mut_miss_map': 0
         }
         
         try:
-            # Get mutant sample data
+            # Get mutant data
             mutant_call = variant.get_sample_data(record, sample_name)
             mutant_depths = parse_allele_depths(mutant_call.get('AD'))
-            mutant_total = sum(mutant_depths)
-            
-            if mutant_total < self.min_coverage:
+            if sum(mutant_depths) < self.min_coverage:
                 return counts
             
-            # Get mutant covered alleles (indices where depth > 0)
             mutant_covered = set(i for i, d in enumerate(mutant_depths) if d > 0)
+            mutant_is_hom = self._is_homozygous(mutant_covered, mutant_depths)
             
-            # Check if mutant is heterozygous
-            if len(mutant_covered) > 1:
-                counts['mut_is_het'] = 1
+            counts['mut_is_hom' if mutant_is_hom else 'mut_is_het'] = 1
             
-            # Aggregate coverage across ALL reference samples
+            # Aggregate reference samples
             ref_combined_covered = set()
-            ref_valid = False
-            
             for ref_sample in ref_samples:
                 try:
                     ref_call = variant.get_sample_data(record, ref_sample)
                     ref_depths = parse_allele_depths(ref_call.get('AD'))
-                    ref_total = sum(ref_depths)
-                    
-                    if ref_total < self.min_coverage:
-                        if self.require_all_coverage:
-                            return counts
-                        continue
-                    
-                    # Union of covered alleles across all references
-                    ref_covered = set(i for i, d in enumerate(ref_depths) if d > 0)
-                    ref_combined_covered.update(ref_covered)
-                    ref_valid = True
-                    
+                    if sum(ref_depths) >= self.min_coverage:
+                        ref_covered = set(i for i, d in enumerate(ref_depths) if d > 0)
+                        ref_combined_covered.update(ref_covered)
                 except HomozygosityError:
-                    if self.require_all_coverage:
-                        return counts
                     continue
             
-            if not ref_valid:
+            if not ref_combined_covered:
                 return counts
             
-            # Check if combined references are heterozygous
-            if len(ref_combined_covered) > 1:
-                counts['ref_is_het'] = 1
-            
-            # Check if mutant is homozygous informative:
-            # - mutant has exactly 1 allele (homozygous)
-            # - references combined are heterozygous (> 1 allele)
-            # - mutant's allele is present in references
-            if len(mutant_covered) == 1 and len(ref_combined_covered) > 1:
-                mutant_allele = list(mutant_covered)[0]
-                if mutant_allele in ref_combined_covered:
-                    counts['mut_is_hom_inf'] = 1
+            # Track mapping alleles (ref alleles not in mutant)
+            mapping_alleles = ref_combined_covered - mutant_covered
+            counts['mut_miss_map' if len(mapping_alleles) > 0 else 'mut_has_map'] = 1
             
             return counts
-            
         except HomozygosityError:
             return counts
     
     def get_name(self) -> str:
-        return f"mutant_ref_cov{self.min_coverage}"
-
+        return f"henke_cov{self.min_coverage}_hom{self.homozygosity_threshold}"
 
 class HomozygosityAnalyser:
-    """Main homozygosity analysis class with streaming processing"""
+    """
+    Processes VCF files to generate homozygosity scores across genomic windows.
     
-    def __init__(self, scorer: HomozygosityScorer, 
-                 window_size: int = 10000, step_size: int = 1000,
-                 use_snp_windows: bool = False, snp_window_size: int = 200, 
-                 snp_step_size: int = 20, sigmoid: dict = {"k": 8, "x0": 0.3},
-                 normalise: bool = False):
+    Supports two windowing strategies:
+        - BP-based: Fixed genomic coordinates (e.g., 10kb windows)
+        - SNP-based: Fixed number of variants (e.g., 200 SNP windows)
+    
+    BP windows are useful for uniform genome coverage, while SNP windows
+    normalize for variable mutation density across the genome.
+    
+    Attributes:
+        scorer: HomozygosityScorer instance (e.g., HenkeScorer)
+        window_size: Window size in bp (BP mode) or SNP count (SNP mode)
+        step_size: Step size in bp (BP mode) or SNP count (SNP mode)
+        use_snp_windows: If True, use SNP-count windows; if False, use BP windows
+    
+    Example:
+        >>> scorer = HenkeScorer(min_coverage=10)
+        >>> analyser = HomozygosityAnalyser(scorer, window_size=50000, step_size=5000)
+        >>> variants_df, windows_df, sample = analyser.process_vcf("data.vcf", False, 8)
+    """
+    
+    def __init__(self, scorer: HomozygosityScorer, window_size: int = 10000, 
+                 step_size: int = 1000, use_snp_windows: bool = False, 
+                 snp_window_size: int = 200, snp_step_size: int = 20):
         self.scorer = scorer
         self.window_size = window_size
         self.step_size = step_size
         self.use_snp_windows = use_snp_windows
         self.snp_window_size = snp_window_size
         self.snp_step_size = snp_step_size
-        self.k = sigmoid["k"]
-        self.x0 = sigmoid["x0"]
-        self.normalise = normalise
-        self.total = None
-        
-        self._validate_config()
     
-    def _validate_config(self) -> None:
-        """Validate analyser configuration"""
-        if self.window_size <= 0 or self.step_size <= 0:
-            raise ValueError("Window and step sizes must be positive")
-        if self.snp_window_size <= 0 or self.snp_step_size <= 0:
-            raise ValueError("SNP window and step sizes must be positive")
-        if self.step_size > self.window_size:
-            logging.warning("Step size larger than window size - windows won't overlap")
-
     def _infer_samples(self, vcf_path: str) -> Tuple[str, List[str]]:
-        """Infer sample and reference names from VCF"""
+        """Infer sample (first) and references (rest) from VCF"""
         with pysam.VariantFile(vcf_path) as vcf:
-            samples = list(vcf.header.samples)
+            samples = [s for s in vcf.header.samples if ':' not in s]  # Skip duplicates
             if len(samples) < 2:
                 raise ValueError("VCF must contain at least 2 samples")
             return samples[0], samples[1:]
-
-    def _count_vcf_records(self, vcf_path: str) -> int:
-        """Count entries in VCF file in an efficient way"""
-        try:
-            with tqdm(desc=f"Counting variants in {vcf_path}", bar_format="{desc}: {elapsed}") as pbar:            
-                def _update_timer():
-                    while not stop_event.is_set():
-                        pbar.update(0)
-                        time.sleep(1)
-                
-                stop_event = threading.Event()
-                timer_thread = threading.Thread(target=_update_timer)
-                timer_thread.start()
-                
-                total = subprocess.run(
-                    ['bcftools', 'view', '-H', vcf_path], 
-                    capture_output=True, text=True, check=True
-                )
-                
-                stop_event.set()
-                timer_thread.join()
-                
-                self.total = len([
-                    line for line in total.stdout.strip().split('\n') if line
-                    ])
-            
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            self.total = None
-
+    
     def _get_chromosomes(self, vcf_path: str) -> List[str]:
         """Extract chromosome list from VCF header"""
         with pysam.VariantFile(vcf_path) as vcf:
-            if vcf.header.contigs:
-                return sorted(list(vcf.header.contigs.keys()))
-            else:
-                chroms = set()
-                for record in tqdm(vcf, desc="Counting chromosmomes"):
-                    chroms.add(record.chrom)
-                return sorted(list(chroms))
-
-    def _process_chromosome(self, vcf_path: str, chrom: str, all_variants: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Process single chromosome and return variants + windows"""
-        sample_name, ref_samples = self._infer_samples(vcf_path)
+            return sorted(list(vcf.header.contigs.keys())) if vcf.header.contigs else []
+    
+    def _process_chromosome(self, vcf_path: str, chrom: str, all_variants: bool) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Process a single chromosome from VCF file.
+    
+        This is called in parallel for each chromosome when using multiprocessing.
+        Extracts variants, calculates per-variant scores, and generates windows.
         
+        Args:
+            vcf_path: Path to VCF file
+            chrom: Chromosome name to process (e.g., "chr1", "scaffold_10")
+            all_variants: If True, include indels; if False, SNPs only
+        
+        Returns:
+            Tuple of (per-variant DataFrame, windowed DataFrame)
+            Per-variant DF contains individual variant counts
+            Windowed DF contains aggregated scores per genomic window
+        """
+        sample_name, ref_samples = self._infer_samples(vcf_path)
         variant_data = []
         
         with pysam.VariantFile(vcf_path) as vcf:
             for record in vcf:
                 if record.chrom != chrom:
                     continue
-                    
+                
                 variant = VariantData(
                     chrom=record.chrom,
                     pos=record.pos,
-                    ref=record.ref,
-                    alts=[str(alt) for alt in record.alts] if record.alts else [],
                     is_snp=(len(record.ref) == 1 and 
-                        all(len(str(alt)) == 1 for alt in record.alts if alt is not None))
+                           all(len(str(alt)) == 1 for alt in record.alts if alt))
                 )
                 
                 if not all_variants and not variant.is_snp:
                     continue
                 
-                result = self.scorer.calculate_score(record, variant, sample_name, ref_samples)
-                
-                if isinstance(result, dict):
-                    variant_data.append({
-                        'chrom': variant.chrom,
-                        'pos': variant.pos,
-                        **result
-                    })
-                elif result > 0:
-                    variant_data.append({
-                        'chrom': variant.chrom,
-                        'pos': variant.pos,
-                        'score': result
-                    })
+                counts = self.scorer.calculate_score(record, variant, sample_name, ref_samples)
+                if any(counts.values()):
+                    variant_data.append({'chrom': variant.chrom, 'pos': variant.pos, **counts})
         
         if not variant_data:
             return pd.DataFrame(), pd.DataFrame()
         
         variants_df = pd.DataFrame(variant_data)
-        
-        # Generate windows
-        windowed_df = self._generate_windows_single_chrom(variants_df)
-        
+        windowed_df = self._generate_windows(variants_df)
         return variants_df, windowed_df
-
-    def process_vcf(self, vcf_path: str, all_variants: bool = True, ncpu: int = 1) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
-        """Process VCF with parallel chromosome processing"""
+    
+    def _generate_windows(self, variants_df: pd.DataFrame) -> pd.DataFrame:
+        """Generate windows based on mode"""
+        if variants_df.empty:
+            return pd.DataFrame()
+        
+        chrom = variants_df['chrom'].iloc[0]
+        chrom_data = variants_df.sort_values('pos')
+        windowed_data = []
+        
+        if self.use_snp_windows:
+            # SNP-count windows
+            for i in range(0, len(chrom_data) - self.snp_window_size + 1, self.snp_step_size):
+                window_vars = chrom_data.iloc[i:i + self.snp_window_size]
+                score = self._calculate_henke_score(window_vars)
+                windowed_data.append({
+                    'chrom': chrom,
+                    'start': int(window_vars['pos'].min()),
+                    'end': int(window_vars['pos'].max()) + 1,
+                    'score': score,
+                    'variant_count': len(window_vars)
+                })
+        else:
+            # BP windows
+            min_pos, max_pos = int(chrom_data['pos'].min()), int(chrom_data['pos'].max())
+            window_start = min_pos
+            while window_start < max_pos:
+                window_end = min(window_start + self.window_size, max_pos + 1)
+                window_vars = chrom_data[(chrom_data['pos'] >= window_start) & 
+                                        (chrom_data['pos'] < window_end)]
+                if len(window_vars) > 0:
+                    score = self._calculate_henke_score(window_vars)
+                    windowed_data.append({
+                        'chrom': chrom,
+                        'start': window_start,
+                        'end': window_end,
+                        'score': score,
+                        'variant_count': len(window_vars)
+                    })
+                window_start += self.step_size
+        
+        return pd.DataFrame(windowed_data)
+    
+    def _calculate_henke_score(self, window_vars: pd.DataFrame) -> float:
+        """
+        Calculate Henke score from aggregated variant counts in a window.
+        
+        Formula: (homozygous_positions / heterozygous_positions) × 
+                 (missing_ref_alleles  / present_ref_alleles)
+        
+        Pseudocounts (+1) prevent division by zero and provide conservative scoring
+        when windows have sparse data.
+        
+        Args:
+            window_vars: DataFrame of variants in window with count columns:
+                mut_is_hom, mut_is_het, mut_has_map, mut_miss_map
+        
+        Returns:
+            Henke score as float. Higher scores indicate stronger evidence of linkage.
+            Typical range: 0.1-100+, with scores >10 often indicating linked regions.
+        
+        Example:
+            Window with 80 hom, 20 het, 60 missing_map, 30 has_map:
+            Score = (80+1)/(20+1) × (60+1)/(30+1) = 3.86 × 1.97 = 7.6
+        """
+        mut_is_hom = window_vars['mut_is_hom'].sum() + 1
+        mut_is_het = window_vars['mut_is_het'].sum() + 1
+        mut_has_map = window_vars['mut_has_map'].sum() + 1
+        mut_miss_map = window_vars['mut_miss_map'].sum() + 1
+        return (float(mut_is_hom) / float(mut_is_het)) * (float(mut_miss_map) / float(mut_has_map))
+    
+    def process_vcf(self, vcf_path: str, all_variants: bool, ncpu: int) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+        """
+        Process entire VCF file with parallel chromosome processing.
+        
+        Automatically infers sample names from VCF header (first sample = mutant,
+        remaining samples = references). Processes each chromosome in parallel
+        and combines results.
+        
+        Args:
+            vcf_path: Path to VCF file (must have AD format field)
+            all_variants: If True, process all variant types; if False, SNPs only
+            ncpu: Number of CPU cores for parallel processing (one per chromosome optimal)
+        
+        Returns:
+            Tuple of (combined_variants_df, combined_windows_df, sample_name)
+            - combined_variants_df: All per-variant counts across genome
+            - combined_windows_df: All window scores across genome
+            - sample_name: Name of mutant sample
+        
+        Raises:
+            ValueError: If VCF has <2 samples or samples not found in header
+        
+        Example:
+            >>> analyser = HomozygosityAnalyser(scorer, window_size=10000)
+            >>> vars_df, wins_df, sample = analyser.process_vcf("input.vcf", False, 8)
+            >>> print(f"Analyzed {len(wins_df)} windows for sample {sample}")
+        """
         sample_name, ref_samples = self._infer_samples(vcf_path)
         chroms = self._get_chromosomes(vcf_path)
-        self._validate_samples(vcf_path, sample_name, ref_samples)
-                
+        
         print(f"Processing {len(chroms)} chromosomes with {ncpu} cores")
         print(f"Sample: {sample_name}")
         print(f"References: {ref_samples}")
         print(f"Scorer: {self.scorer.get_name()}")
         
-        # Process chromosomes in parallel
         with Pool(ncpu) as pool:
             process_func = partial(self._process_chromosome, vcf_path, all_variants=all_variants)
-            results = list(tqdm(
-                pool.imap(process_func, chroms), 
-                total=len(chroms), 
-                desc="Processing chromosomes"
-            ))
+            results = list(tqdm(pool.imap(process_func, chroms), total=len(chroms), 
+                              desc="Processing chromosomes"))
         
-        # Combine results
-        all_variants_dfs = []
-        all_windows_dfs = []
-        
-        for variants_df, windowed_df in results:
-            if not variants_df.empty:
-                all_variants_dfs.append(variants_df)
-            if not windowed_df.empty:
-                all_windows_dfs.append(windowed_df)
+        all_variants_dfs = [v for v, w in results if not v.empty]
+        all_windows_dfs = [w for v, w in results if not w.empty]
         
         combined_variants = pd.concat(all_variants_dfs, ignore_index=True) if all_variants_dfs else pd.DataFrame()
         combined_windows = pd.concat(all_windows_dfs, ignore_index=True) if all_windows_dfs else pd.DataFrame()
         
         print(f"Found {len(combined_variants)} variants across all chromosomes")
-        
         return combined_variants, combined_windows, sample_name
 
-    def _validate_samples(self, vcf_path: str, sample_name: str, ref_samples: List[str]) -> None:
-        """Validate sample names exist in VCF"""
-        with pysam.VariantFile(vcf_path) as vcf:
-            samples = list(vcf.header.samples)
-            
-            if sample_name not in samples:
-                raise ValueError(f"Sample {sample_name} not found in VCF. Available: {samples}")
-            
-            if self.scorer.requires_references() and not ref_samples:
-                raise ValueError(f"Scorer {self.scorer.get_name()} requires reference samples")
-            
-            for ref in ref_samples:
-                if ref not in samples:
-                    raise ValueError(f"Reference sample {ref} not found in VCF. Available: {samples}")
-
-    def _generate_windows_single_chrom(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate windows for single chromosome - handles both count and score types"""
-        if variants_df.empty:
-            return pd.DataFrame()
-        
-        # Check if this is count-based or score-based
-        is_count_based = 'mut_is_het' in variants_df.columns
-        
-        if self.use_snp_windows:
-            # SNP-count based windows
-            if is_count_based:
-                return self._generate_snp_windows_counts(variants_df)
-            else:
-                return self._generate_snp_windows_scores(variants_df)
-        else:
-            # BP-based windows
-            if is_count_based:
-                return self._generate_windows_counts(variants_df)
-            else:
-                return self._generate_windows_scores(variants_df)
-
-    def _generate_snp_windows_counts(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate SNP-count windows using count-based scoring"""
-        if variants_df.empty or len(variants_df) < self.snp_window_size:
-            return pd.DataFrame()
-        
-        windowed_data = []
-        chrom = variants_df['chrom'].iloc[0]
-        chrom_data = variants_df.sort_values('pos')
-        
-        # Slide by SNP count, not bp
-        for i in range(0, len(chrom_data) - self.snp_window_size + 1, self.snp_step_size):
-            window_variants = chrom_data.iloc[i:i + self.snp_window_size]
-            
-            # Henke-style formula
-            mut_is_hom = window_variants['mut_is_hom'].sum() + 1
-            mut_is_het = window_variants['mut_is_het'].sum() + 1
-            mut_has_map = window_variants['mut_has_map'].sum() + 1
-            mut_miss_map = window_variants['mut_miss_map'].sum() + 1
-            
-            score = (float(mut_is_hom) / float(mut_is_het)) * (float(mut_miss_map) / float(mut_has_map))
-            
-            windowed_data.append({
-                'chrom': chrom,
-                'start': int(window_variants['pos'].min()),
-                'end': int(window_variants['pos'].max()) + 1,
-                'score': score,
-                'variant_count': len(window_variants)
-            })
-        
-        return pd.DataFrame(windowed_data)
-
-    def _generate_snp_windows_scores(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate SNP-count windows using score averaging"""
-        if variants_df.empty or len(variants_df) < self.snp_window_size:
-            return pd.DataFrame()
-        
-        windowed_data = []
-        chrom = variants_df['chrom'].iloc[0]
-        chrom_data = variants_df.sort_values('pos')
-        
-        for i in range(0, len(chrom_data) - self.snp_window_size + 1, self.snp_step_size):
-            window_variants = chrom_data.iloc[i:i + self.snp_window_size]
-            
-            windowed_data.append({
-                'chrom': chrom,
-                'start': int(window_variants['pos'].min()),
-                'end': int(window_variants['pos'].max()) + 1,
-                'score': window_variants['score'].mean(),
-                'variant_count': len(window_variants)
-            })
-        
-        return pd.DataFrame(windowed_data)
-
-    def _generate_windows_counts(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate windows using count-based scoring (original algorithm)"""
-        windowed_data = []
-        chrom = variants_df['chrom'].iloc[0]
-        chrom_data = variants_df.sort_values('pos')
-        
-        min_pos = int(chrom_data['pos'].min())
-        max_pos = int(chrom_data['pos'].max())
-        
-        window_start = min_pos
-        while window_start < max_pos:
-            window_end = min(window_start + self.window_size, max_pos + 1)
-            
-            window_variants = chrom_data[
-                (chrom_data['pos'] >= window_start) & 
-                (chrom_data['pos'] < window_end)
-            ]
-            
-            if len(window_variants) > 0:
-                # Sum counts across window, add 1 pseudocount
-                ref_is_het = window_variants['ref_is_het'].sum() + 1
-                mut_is_het = window_variants['mut_is_het'].sum() + 1
-                mut_is_hom_inf = window_variants['mut_is_hom_inf'].sum() + 1
-                
-                # Original formula: (ref_het / mut_het) * mut_hom_inf
-                score = (float(ref_is_het) / float(mut_is_het)) * float(mut_is_hom_inf)
-                
-                windowed_data.append({
-                    'chrom': chrom,
-                    'start': window_start,
-                    'end': window_end,
-                    'score': score,
-                    'variant_count': len(window_variants)
-                })
-            
-            window_start += self.step_size
-        
-        return pd.DataFrame(windowed_data)
-
-    def _generate_windows_scores(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate windows using score averaging (for fraction-based scorers)"""
-        windowed_data = []
-        chrom = variants_df['chrom'].iloc[0]
-        chrom_data = variants_df.sort_values('pos')
-        
-        min_pos = int(chrom_data['pos'].min())
-        max_pos = int(chrom_data['pos'].max())
-        
-        window_start = min_pos
-        while window_start < max_pos:
-            window_end = min(window_start + self.window_size, max_pos + 1)
-            
-            window_variants = chrom_data[
-                (chrom_data['pos'] >= window_start) & 
-                (chrom_data['pos'] < window_end)
-            ]
-            
-            if len(window_variants) > 0:
-                windowed_data.append({
-                    'chrom': chrom,
-                    'start': window_start,
-                    'end': window_end,
-                    'score': window_variants['score'].mean(),
-                    'variant_count': len(window_variants)
-                })
-            
-            window_start += self.step_size
-        
-        return pd.DataFrame(windowed_data)
-
-    def __generate_bp_windows_single_chrom(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate BP windows for single chromosome"""
-        if variants_df.empty:
-            return pd.DataFrame()
-        
-        windowed_data = []
-        chrom = variants_df['chrom'].iloc[0]  # Single chromosome
-        chrom_data = variants_df.sort_values('pos')
-        
-        min_pos = int(chrom_data['pos'].min())
-        max_pos = int(chrom_data['pos'].max())
-        
-        window_start = min_pos
-        while window_start < max_pos:
-            window_end = min(window_start + self.window_size, max_pos + 1)
-            
-            window_variants = chrom_data[
-                (chrom_data['pos'] >= window_start) & 
-                (chrom_data['pos'] < window_end)
-            ]
-            
-            if len(window_variants) > 0:
-                windowed_data.append({
-                    'chrom': chrom,
-                    'start': window_start,
-                    'end': window_end,
-                    'score': window_variants['score'].mean(),
-                    'variant_count': len(window_variants)
-                })
-            
-            window_start += self.step_size
-        
-        return pd.DataFrame(windowed_data)
-
-    def __generate_snp_windows_single_chrom(self, variants_df: pd.DataFrame) -> pd.DataFrame:
-        """Generate SNP windows for single chromosome"""
-        if variants_df.empty or len(variants_df) < self.snp_window_size:
-            return pd.DataFrame()
-        
-        windowed_data = []
-        chrom = variants_df['chrom'].iloc[0]
-        chrom_data = variants_df.sort_values('pos')
-        
-        for i in range(0, len(chrom_data) - self.snp_window_size + 1, self.snp_step_size):
-            window_variants = chrom_data.iloc[i:i + self.snp_window_size]
-            
-            windowed_data.append({
-                'chrom': chrom,
-                'start': int(window_variants['pos'].min()),
-                'end': int(window_variants['pos'].max()) + 1,
-                'score': window_variants['score'].mean(),
-                'variant_count': len(window_variants)
-            })
-        
-        return pd.DataFrame(windowed_data)
-
-
-
-def write_bedgraph(df: pd.DataFrame, output_file: str, track_name: str, 
-                  description: str, score_col: str = 'score') -> None:
-    """Write DataFrame to bedgraph format"""
+def write_bedgraph(df: pd.DataFrame, output_file: str, track_name: str, description: str):
+    """
+    Write windowed scores to UCSC BedGraph format for genome browser visualization.
+    
+    BedGraph format: chrom <tab> start <tab> end <tab> score
+    Output can be loaded directly into IGV, UCSC Genome Browser, or converted to TDF.
+    
+    Args:
+        df: DataFrame with columns: chrom, start, end, score
+        output_file: Path for output .bedgraph file
+        track_name: Track name for genome browser display
+        description: Track description for genome browser
+    
+    Example:
+        >>> write_bedgraph(windows_df, "output.bedgraph", 
+        ...                "mutant1_henke", "Henke homozygosity scores")
+    """
     with open(output_file, 'w') as f:
         f.write(f'track type=bedGraph name="{track_name}" description="{description}"\n')
-        
         for _, row in tqdm(df.iterrows(), total=len(df), desc=f"Writing {output_file}"):
-            if score_col in row:
-                if 'start' in row:  # Windowed data
-                    f.write(f"{row['chrom']}\t{row['start']}\t{row['end']}\t{row[score_col]:.3f}\n")
-                else:  # Per-variant data
-                    f.write(f"{row['chrom']}\t{row['pos']-1}\t{row['pos']}\t{row[score_col]:.3f}\n")
-
+            f.write(f"{row['chrom']}\t{row['start']}\t{row['end']}\t{row['score']:.3f}\n")
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Enhanced homozygosity analysis with multiple scoring methods",
+        description="Homozygosity mapping with Henke-style scoring",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
     parser.add_argument('vcf_path', help='Input VCF file')
     parser.add_argument('output_prefix', help='Output file prefix')
-    
-    # Scorer options
-    parser.add_argument('--scorer', choices=['allele_depth', 'mutant_reference'], 
-                       default='mutant_reference', help='Homozygosity scoring method')
-    parser.add_argument('-t', '--threshold', type=float, default=0.9,
-                       help='Threshold for allele_depth scorer')
     parser.add_argument('-c', '--min_coverage', type=int, default=1,
-                       help='Minimum coverage for mutant_reference scorer')
-    parser.add_argument('--require_all_coverage', action='store_true',
-                       help='Require all reference samples meet min coverage')
-
-    # Window options
+                       help='Minimum coverage threshold')
+    parser.add_argument('-t', '--homozygosity_threshold', type=float, default=0.85,
+                       help='Allele fraction for soft homozygosity calling (0.5-1.0)')
     parser.add_argument('-w', '--window_size', type=int, default=10000,
                        help='Window size (bp or SNP count)')
     parser.add_argument('--step_size', type=int, default=1000,
@@ -705,93 +486,54 @@ def main():
                        help='SNP window size')
     parser.add_argument('--snp_step_size', type=int, default=20,
                        help='SNP step size')
-    
-    # Transform options
-    parser.add_argument('-k', type=int, default=None,
-                        help='Sigmoid function steepness (try starting with 8)')
-    parser.add_argument('-x', type=float, default=None,
-                        help='Sigmoid function steepness (try starting with 0.3)')
-    parser.add_argument('--normalise', action='store_true',
-                        help='Normalise sigmoid function (default: False)')
-    
-    # General options
     parser.add_argument('--all_variants', action='store_true',
                        help='Include all variants (default: SNPs only)')
     parser.add_argument('-i', '--fasta_index', type=str, default=None,
-                       help='Path to genome index fasta.fai (if absent, skip tdf generation)')
+                       help='Genome .fai file for TDF generation')
     parser.add_argument('-n', '--ncpu', type=int, default=8,
-                        help="Number of cpus (ideally one per chr)")
-    parser.add_argument('-v', '--verbose', action='store_true')
+                       help='Number of CPUs')
     
     args = parser.parse_args()
     
-    # Set up logging
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    
     try:
-        # Create scorer
-        if args.scorer == 'allele_depth':
-            scorer = AlleleDepthScorer(threshold=args.threshold)
-        elif args.scorer == 'mutant_reference':
-            scorer = MutantReferenceScorer(
-                min_coverage=args.min_coverage,
-                require_all_coverage=args.require_all_coverage
-                )
-        else:
-            raise ValueError(f"Unknown scorer: {args.scorer}")
+        scorer = HenkeScorer(
+            min_coverage=args.min_coverage,
+            homozygosity_threshold=args.homozygosity_threshold
+        )
         
-        # Create analyser
         analyser = HomozygosityAnalyser(
             scorer=scorer,
             window_size=args.window_size,
             step_size=args.step_size,
             use_snp_windows=args.use_snp_windows,
             snp_window_size=args.snp_window_size,
-            snp_step_size=args.snp_step_size,
-            sigmoid={"k": args.k, "x0": args.x},
-            normalise=args.normalise
+            snp_step_size=args.snp_step_size
         )
         
-        # Process VCF
         variants_df, windowed_df, sample_name = analyser.process_vcf(
             args.vcf_path, args.all_variants, args.ncpu
         )
         
-        if variants_df.empty:
+        if windowed_df.empty:
             print("No results to write")
             return
         
-        # Write outputs
-        variant_file = f"{args.output_prefix}_variants.bedgraph"
         window_file = f"{args.output_prefix}_windows.bedgraph"
-        
-        write_bedgraph(variants_df, variant_file, 
-                      f"{sample_name}_{scorer.get_name()}", 
-                      "Per-variant homozygosity scores")
+        window_type = "SNP" if args.use_snp_windows else "BP"
+        write_bedgraph(windowed_df, window_file,
+                      f"{sample_name}_{scorer.get_name()}",
+                      f"Henke homozygosity score ({window_type} windows)")
         
         if args.fasta_index:
-            variant_tdf = variant_file.replace(".bedgraph", ".tdf")
-            bedgraph_to_tdf(variant_file, args.fasta_index, variant_tdf)
+            window_tdf = window_file.replace(".bedgraph", ".tdf")
+            bedgraph_to_tdf(window_file, args.fasta_index, window_tdf)
         
-        if not windowed_df.empty:
-            window_type = "SNP" if args.use_snp_windows else "BP"
-            write_bedgraph(windowed_df, window_file,
-                          f"{sample_name}_{scorer.get_name()}_windowed",
-                          f"Windowed homozygosity ({window_type} windows)")
-            if args.fasta_index:
-                window_tdf = window_file.replace(".bedgraph", ".tdf")
-                bedgraph_to_tdf(window_file, args.fasta_index, window_tdf)            
+        print(f"\nGenerated: {window_file}")
         
-        print(f"\nGenerated files:")
-        print(f"  - {variant_file}")
-        if not windowed_df.empty:
-            print(f"  - {window_file}")
-            
     except Exception as e:
         print(f"Error: {e}")
-        if args.verbose:
-            raise
+        raise
+
 
 if __name__ == "__main__":
     main()

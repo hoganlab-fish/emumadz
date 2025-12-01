@@ -826,6 +826,10 @@ The aim is to `visualise homozygosity hotspots across the entire genome`. This a
         prep_tdf $sample
     done
 
+We use the scoring algorithm from `Henke et al., 2013`_.
+
+.. _Henke et al., 2013: https://doi.org/10.1016/j.ymeth.2013.05.015
+
 .. hint::
     This step can be performed directly after ``vcf`` files are merged and SNPs are filtered out. It is located in the visualisation section for convenient reference.
 
