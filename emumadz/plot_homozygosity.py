@@ -467,10 +467,71 @@ class HomozygosityAnalyser:
         # Check if this is count-based or score-based
         is_count_based = 'mut_is_het' in variants_df.columns
         
-        if is_count_based:
-            return self._generate_windows_counts(variants_df)
+        if self.use_snp_windows:
+            # SNP-count based windows
+            if is_count_based:
+                return self._generate_snp_windows_counts(variants_df)
+            else:
+                return self._generate_snp_windows_scores(variants_df)
         else:
-            return self._generate_windows_scores(variants_df)
+            # BP-based windows
+            if is_count_based:
+                return self._generate_windows_counts(variants_df)
+            else:
+                return self._generate_windows_scores(variants_df)
+
+    def _generate_snp_windows_counts(self, variants_df: pd.DataFrame) -> pd.DataFrame:
+        """Generate SNP-count windows using count-based scoring"""
+        if variants_df.empty or len(variants_df) < self.snp_window_size:
+            return pd.DataFrame()
+        
+        windowed_data = []
+        chrom = variants_df['chrom'].iloc[0]
+        chrom_data = variants_df.sort_values('pos')
+        
+        # Slide by SNP count, not bp
+        for i in range(0, len(chrom_data) - self.snp_window_size + 1, self.snp_step_size):
+            window_variants = chrom_data.iloc[i:i + self.snp_window_size]
+            
+            # Henke-style formula
+            mut_is_hom = window_variants['mut_is_hom'].sum() + 1
+            mut_is_het = window_variants['mut_is_het'].sum() + 1
+            mut_has_map = window_variants['mut_has_map'].sum() + 1
+            mut_miss_map = window_variants['mut_miss_map'].sum() + 1
+            
+            score = (float(mut_is_hom) / float(mut_is_het)) * (float(mut_miss_map) / float(mut_has_map))
+            
+            windowed_data.append({
+                'chrom': chrom,
+                'start': int(window_variants['pos'].min()),
+                'end': int(window_variants['pos'].max()) + 1,
+                'score': score,
+                'variant_count': len(window_variants)
+            })
+        
+        return pd.DataFrame(windowed_data)
+
+    def _generate_snp_windows_scores(self, variants_df: pd.DataFrame) -> pd.DataFrame:
+        """Generate SNP-count windows using score averaging"""
+        if variants_df.empty or len(variants_df) < self.snp_window_size:
+            return pd.DataFrame()
+        
+        windowed_data = []
+        chrom = variants_df['chrom'].iloc[0]
+        chrom_data = variants_df.sort_values('pos')
+        
+        for i in range(0, len(chrom_data) - self.snp_window_size + 1, self.snp_step_size):
+            window_variants = chrom_data.iloc[i:i + self.snp_window_size]
+            
+            windowed_data.append({
+                'chrom': chrom,
+                'start': int(window_variants['pos'].min()),
+                'end': int(window_variants['pos'].max()) + 1,
+                'score': window_variants['score'].mean(),
+                'variant_count': len(window_variants)
+            })
+        
+        return pd.DataFrame(windowed_data)
 
     def _generate_windows_counts(self, variants_df: pd.DataFrame) -> pd.DataFrame:
         """Generate windows using count-based scoring (original algorithm)"""
