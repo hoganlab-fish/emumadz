@@ -52,3 +52,8 @@ Code in this repository is provided under a `MIT license`_. This documentation i
     :members:
     :undoc-members:
     :show-inheritance:
+
+.. automodule:: emumadz.plot_homozygosity
+    :members:
+    :undoc-members:
+    :show-inheritance:
