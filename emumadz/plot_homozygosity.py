@@ -35,7 +35,7 @@ def add_homozygosity_to_variant_json(
     tdf_file: str,
     bedgraph_file: str,
     window_size: int,
-    display_name: str,
+    display_name: str = None,
     overwrite: bool = True
     ) -> None:
     """
@@ -399,7 +399,6 @@ class HomozygosityAnalyser:
         
         # Load samplesheet for name mapping
         self.sample_mapping = load_samplesheet(samplesheet_path) if samplesheet_path else {}
-        self._validate_config()
     
     def _infer_samples(self, vcf_path: str) -> Tuple[str, List[str], str]:
         """
@@ -449,7 +448,7 @@ class HomozygosityAnalyser:
             Per-variant DF contains individual variant counts
             Windowed DF contains aggregated scores per genomic window
         """
-        sample_name, ref_samples = self._infer_samples(vcf_path)
+        sample_name, ref_samples, display_name = self._infer_samples(vcf_path)
         variant_data = []
         
         with pysam.VariantFile(vcf_path) as vcf:
@@ -547,7 +546,22 @@ class HomozygosityAnalyser:
         mut_has_map = window_vars['mut_has_map'].sum() + 1
         mut_miss_map = window_vars['mut_miss_map'].sum() + 1
         return (float(mut_is_hom) / float(mut_is_het)) * (float(mut_miss_map) / float(mut_has_map))
-    
+
+    def _validate_samples(self, vcf_path: str, sample_name: str, ref_samples: List[str]) -> None:
+        """Validate sample names exist in VCF"""
+        with pysam.VariantFile(vcf_path) as vcf:
+            samples = list(vcf.header.samples)
+            
+            if sample_name not in samples:
+                raise ValueError(f"Sample {sample_name} not found in VCF. Available: {samples}")
+            
+            if self.scorer.requires_references() and not ref_samples:
+                raise ValueError(f"Scorer {self.scorer.get_name()} requires reference samples")
+            
+            for ref in ref_samples:
+                if ref not in samples:
+                    raise ValueError(f"Reference sample {ref} not found in VCF. Available: {samples}")
+
     def process_vcf(self, vcf_path: str, all_variants: bool, ncpu: int) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
         """
         Process entire VCF file with parallel chromosome processing.
@@ -588,15 +602,26 @@ class HomozygosityAnalyser:
         
         # Process chromosomes in parallel
         with Pool(ncpu) as pool:
-            process_func = partial(self._process_chromosome, vcf_path, all_variants=all_variants)
-            results = list(tqdm(pool.imap(process_func, chroms), total=len(chroms), 
-                              desc="Processing chromosomes"))
+            process_func = partial(
+                self._process_chromosome, 
+                vcf_path, 
+                all_variants=all_variants
+                )
+            results = list(tqdm(
+                pool.imap(process_func, chroms), 
+                total=len(chroms), 
+                desc="Processing chromosomes"
+                ))
         
         all_variants_dfs = [v for v, w in results if not v.empty]
         all_windows_dfs = [w for v, w in results if not w.empty]
         
-        combined_variants = pd.concat(all_variants_dfs, ignore_index=True) if all_variants_dfs else pd.DataFrame()
-        combined_windows = pd.concat(all_windows_dfs, ignore_index=True) if all_windows_dfs else pd.DataFrame()
+        combined_variants = pd.concat(
+            all_variants_dfs, ignore_index=True
+            ) if all_variants_dfs else pd.DataFrame()
+        combined_windows = pd.concat(
+            all_windows_dfs, ignore_index=True
+            ) if all_windows_dfs else pd.DataFrame()
         
         print(f"Found {len(combined_variants)} variants across all chromosomes")
         return combined_variants, combined_windows, vcf_sample_name, display_name
@@ -638,7 +663,8 @@ def main():
     
     parser.add_argument('vcf_path', help='Input VCF file')
     parser.add_argument('output_prefix', help='Output file prefix')
-    parser.add_argument('samplesheet', help='Samplesheet TSV for sample name mapping')    
+    parser.add_argument('-s', '--samplesheet', type=str, default=None,
+                        help='Samplesheet TSV for sample name mapping')    
     parser.add_argument('-c', '--min_coverage', type=int, default=1,
                        help='Minimum coverage threshold')
     parser.add_argument('-t', '--homozygosity_threshold', type=float, default=0.85,
