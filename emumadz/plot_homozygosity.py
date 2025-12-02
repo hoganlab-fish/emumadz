@@ -663,7 +663,7 @@ def main():
                        help='Number of CPUs (ideally one per chromosome)')
     parser.add_argument('-j', '--variant_json', type=str, default=None,
                        help='Variant JSON file to add homozygosity tracks to')
-    parser.add_argument('--overwrite_homozygosity', action='store_true', default=True,
+    parser.add_argument('--overwrite_homozygosity', action='store_true',
                        help='Overwrite existing homozygosity data in JSON')    
     
     args = parser.parse_args()
