@@ -52,6 +52,10 @@ def serve_logo(filename):
 def serve_genome(filename):
     return send_from_directory('igv-genomes', filename)
 
+@app.route('/gos-dist/<path:filename>')
+def serve_gosling(filename):
+    return send_from_directory('gos-dist/gosling.js/dist', filename)
+
 @app.route('/api/genomes')
 def genome_list():
     genome_file = os.path.join('igv-genomes', 'genomes.json')

@@ -4,6 +4,8 @@ Identifies regions where mutant is homozygous while references are heterozygous.
 Uses: https://doi.org/10.1016/j.ymeth.2013.05.015
 """
 import argparse
+import os
+import json
 import subprocess
 import time
 from abc import ABC, abstractmethod
@@ -31,6 +33,77 @@ class VariantData:
 class HomozygosityError(Exception):
     """Custom exception for homozygosity analysis errors"""
     pass
+
+def add_homozygosity_to_variant_json(
+        variant_json_path: str,
+        tdf_file: str,
+        bedgraph_file: str,
+        window_size: int,
+        sample_name: str
+    ) -> None:
+    """
+    Add homozygosity track information to existing variant JSON file.
+    
+    Modifies the variant JSON to include homozygosity TDF/bedgraph track info
+    that will be automatically loaded in the variant viewer alongside BAM tracks.
+    
+    Args:
+        variant_json_path: Path to variant JSON file from VCF parser
+        tdf_file: Path to TDF file (or None if not generated)
+        bedgraph_file: Path to bedgraph file
+        window_size: Analysis window size
+        sample_name: Sample identifier
+    
+    Example:
+        >>> add_homozygosity_to_variant_json("variants.json", "scores.tdf",
+        ...                                   "scores.bedgraph", 10000, "mutant1")
+    """
+    
+    # Load existing variant data
+    with open(variant_json_path, 'r') as f:
+        variant_data = json.load(f)
+    
+    # Get directory for relative path calculation
+    json_dir = os.path.dirname(os.path.abspath(variant_json_path))
+    
+    # Calculate relative paths
+    if tdf_file and os.path.exists(tdf_file):
+        tdf_rel = os.path.relpath(tdf_file, json_dir)
+        track_url = tdf_rel
+        track_format = "tdf"
+    else:
+        bedgraph_rel = os.path.relpath(bedgraph_file, json_dir)
+        track_url = bedgraph_rel
+        track_format = "bedgraph"
+    
+    # Create homozygosity track config
+    homozygosity_track = {
+        "name": f"Homozygosity Mapping - {sample_name}",
+        "type": "wig",
+        "format": track_format,
+        "url": track_url,
+        "height": 200,
+        "color": "rgb(0, 150, 200)",
+        "altColor": "rgb(0, 100, 150)",
+        "min": 0,
+        "max": 50,
+        "autoscale": False,
+        "displayMode": "COLLAPSED",
+        "visibilityWindow": -1
+    }
+    
+    # Add homozygosity info to each variant record
+    for variant in variant_data:
+        variant['homozygosity_track'] = homozygosity_track
+        variant['homozygosity_window_size'] = window_size
+    
+    # Save updated JSON
+    with open(variant_json_path, 'w') as f:
+        json.dump(variant_data, f, indent=2)
+    
+    print(f"Added homozygosity track info to: {variant_json_path}")
+    print(f"Track URL: {track_url}")
+
 
 def parse_allele_depths(ad_field) -> List[int]:
     """Parse AD field with comprehensive error handling"""
@@ -490,8 +563,12 @@ def main():
                        help='Include all variants (default: SNPs only)')
     parser.add_argument('-i', '--fasta_index', type=str, default=None,
                        help='Genome .fai file for TDF generation')
+    parser.add_argument('-g', '--genome', type=str, default="danRer7",
+                       help='Genome assembly (e.g., hg38, mm10, danRer11)')
     parser.add_argument('-n', '--ncpu', type=int, default=8,
                        help='Number of CPUs')
+    parser.add_argument('-j', '--variant_json', type=str, default=None,
+                       help='Variant JSON file to add homozygosity tracks to')
     
     args = parser.parse_args()
     
@@ -524,16 +601,33 @@ def main():
                       f"{sample_name}_{scorer.get_name()}",
                       f"Henke homozygosity score ({window_type} windows)")
         
+        # Generate TDF if fasta index provided
+        tdf_file = None
         if args.fasta_index:
-            window_tdf = window_file.replace(".bedgraph", ".tdf")
-            bedgraph_to_tdf(window_file, args.fasta_index, window_tdf)
+            tdf_file = window_file.replace(".bedgraph", ".tdf")
+            if not bedgraph_to_tdf(window_file, args.fasta_index, tdf_file):
+                tdf_file = None  # Failed to create TDF
         
-        print(f"\nGenerated: {window_file}")
+        # Add homozygosity track to variant JSON
+        if args.variant_json and os.path.exists(args.variant_json):
+            add_homozygosity_to_variant_json(
+                args.variant_json,
+                tdf_file,
+                window_file,
+                args.window_size,
+                sample_name
+            )
+            print(f"\n✓ Homozygosity track added to {args.variant_json}")
+            print("  The variant viewer will now show homozygosity mapping alongside BAM tracks")
+        
+        print(f"\nGenerated files:")
+        print(f"  - {window_file} (bedgraph)")
+        if tdf_file:
+            print(f"  - {tdf_file} (TDF for IGV)")
         
     except Exception as e:
         print(f"Error: {e}")
         raise
-
 
 if __name__ == "__main__":
     main()
