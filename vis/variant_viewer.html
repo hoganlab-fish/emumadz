@@ -1464,6 +1464,15 @@
                     console.warn(`Custom GFF track skipped - genome mismatch. Selected: ${selectedGenome}, GFF: ${genomeConfig.genome || 'unknown'}`);
                 }
             }
+            // Load homozygosity track if available
+            if (variant.homozygosity_track) {
+                const homozTrack = {
+                    ...variant.homozygosity_track,
+                    url: '/data/' + variant.homozygosity_track.url
+                };
+                tracks.push(homozTrack);
+                console.log('Loading homozygosity track:', homozTrack.url);
+            }            
             tracks.push({
                 type: 'annotation',
                 format: 'bed',
