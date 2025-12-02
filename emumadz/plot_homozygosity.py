@@ -660,7 +660,7 @@ def main():
     parser.add_argument('-g', '--genome', type=str, default="danRer7",
                        help='Genome assembly (e.g., hg38, mm10, danRer11)')
     parser.add_argument('-n', '--ncpu', type=int, default=8,
-                       help='Number of CPUs')
+                       help='Number of CPUs (ideally one per chromosome)')
     parser.add_argument('-j', '--variant_json', type=str, default=None,
                        help='Variant JSON file to add homozygosity tracks to')
     parser.add_argument('--overwrite_homozygosity', action='store_true', default=True,
