@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-"""
-Identifies regions where mutant is homozygous while references are heterozygous.
-Uses: https://doi.org/10.1016/j.ymeth.2013.05.015
-"""
+# Identifies regions where mutant is homozygous while references are heterozygous.
+# Uses: https://doi.org/10.1016/j.ymeth.2013.05.015
 import argparse
 import os
 import json
@@ -13,11 +11,9 @@ from dataclasses import dataclass
 from functools import partial
 from multiprocessing import Pool
 from typing import Dict, List, Tuple
-
 import pandas as pd
 import pysam
 from tqdm import tqdm
-
 
 @dataclass
 class VariantData:
@@ -35,30 +31,24 @@ class HomozygosityError(Exception):
     pass
 
 def add_homozygosity_to_variant_json(
-        variant_json_path: str,
-        tdf_file: str,
-        bedgraph_file: str,
-        window_size: int,
-        sample_name: str
+    variant_json_path: str,
+    tdf_file: str,
+    bedgraph_file: str,
+    window_size: int,
+    display_name: str,
+    overwrite: bool = True
     ) -> None:
     """
-    Add homozygosity track information to existing variant JSON file.
-    
-    Modifies the variant JSON to include homozygosity TDF/bedgraph track info
-    that will be automatically loaded in the variant viewer alongside BAM tracks.
+    Add or update homozygosity track information in variant JSON file.
     
     Args:
         variant_json_path: Path to variant JSON file from VCF parser
         tdf_file: Path to TDF file (or None if not generated)
         bedgraph_file: Path to bedgraph file
         window_size: Analysis window size
-        sample_name: Sample identifier
-    
-    Example:
-        >>> add_homozygosity_to_variant_json("variants.json", "scores.tdf",
-        ...                                   "scores.bedgraph", 10000, "mutant1")
+        display_name: Sample display name (from samplesheet)
+        overwrite: If True, overwrite existing homozygosity data; if False, append new track
     """
-    
     # Load existing variant data
     with open(variant_json_path, 'r') as f:
         variant_data = json.load(f)
@@ -78,11 +68,11 @@ def add_homozygosity_to_variant_json(
     
     # Create homozygosity track config
     homozygosity_track = {
-        "name": f"Homozygosity Mapping - {sample_name}",
+        "name": f"Homozygosity Mapping - {display_name}",
         "type": "wig",
         "format": track_format,
         "url": track_url,
-        "height": 200,
+        "height": 100,
         "color": "rgb(0, 150, 200)",
         "altColor": "rgb(0, 100, 150)",
         "min": 0,
@@ -92,18 +82,87 @@ def add_homozygosity_to_variant_json(
         "visibilityWindow": -1
     }
     
-    # Add homozygosity info to each variant record
+    # Update each variant record
+    updated_count = 0
+    added_count = 0
+    
     for variant in variant_data:
-        variant['homozygosity_track'] = homozygosity_track
-        variant['homozygosity_window_size'] = window_size
+        if overwrite:
+            # Remove old homozygosity keys and replace
+            old_keys = [k for k in variant.keys() if k.startswith('homozygosity_')]
+            for key in old_keys:
+                del variant[key]
+            
+            # Set as single track
+            variant['homozygosity_track'] = homozygosity_track
+            variant['homozygosity_window_size'] = window_size
+            variant['homozygosity_display_name'] = display_name
+            variant['homozygosity_updated'] = pd.Timestamp.now().isoformat()
+            updated_count += 1
+        else:
+            # Append mode: add to list of tracks
+            if 'homozygosity_tracks' not in variant:
+                variant['homozygosity_tracks'] = []
+            
+            # Check if this track already exists (by URL)
+            existing_urls = [t.get('url') for t in variant.get('homozygosity_tracks', [])]
+            if track_url not in existing_urls:
+                variant['homozygosity_tracks'].append(homozygosity_track)
+                
+                # Store metadata in a list as well
+                if 'homozygosity_metadata' not in variant:
+                    variant['homozygosity_metadata'] = []
+                
+                variant['homozygosity_metadata'].append({
+                    'window_size': window_size,
+                    'display_name': display_name,
+                    'updated': pd.Timestamp.now().isoformat()
+                })
+                added_count += 1
     
     # Save updated JSON
     with open(variant_json_path, 'w') as f:
         json.dump(variant_data, f, indent=2)
     
-    print(f"Added homozygosity track info to: {variant_json_path}")
-    print(f"Track URL: {track_url}")
+    if overwrite:
+        print(f"✓ Replaced homozygosity track info in: {variant_json_path}")
+        print(f"  Variants updated: {updated_count}")
+    else:
+        print(f"✓ Added additional homozygosity track to: {variant_json_path}")
+        print(f"  Variants updated: {added_count}")
+    
+    print(f"  Track URL: {track_url}")
+    print(f"  Display Name: {display_name}")
+    print(f"  Format: {track_format}")
 
+def load_samplesheet(samplesheet_path: str) -> Dict[str, str]:
+    """
+    Load samplesheet to map sample names to VCF sample IDs.
+    
+    Args:
+        samplesheet_path: Path to tab-separated samplesheet
+    
+    Returns:
+        Dictionary mapping sample_identity to VCF sample names
+    
+    Example samplesheet format:
+        sample_identity    vcf_sample_name    alignment_file    sample_type
+        mutant_1           TL2312073-163-4L   /path/to.bam      mutant
+    """
+    if not samplesheet_path or not os.path.exists(samplesheet_path):
+        return {}
+    
+    samplesheet = pd.read_csv(samplesheet_path, sep='\t')
+    
+    # Create mapping: sample_identity -> vcf_sample_name
+    # This allows consistent naming even if VCF sample names change
+    sample_mapping = {}
+    for _, row in samplesheet.iterrows():
+        sample_identity = row['sample_identity']
+        vcf_sample = row.get('vcf_sample_name', sample_identity)
+        sample_mapping[sample_identity] = vcf_sample
+    
+    return sample_mapping
 
 def parse_allele_depths(ad_field) -> List[int]:
     """Parse AD field with comprehensive error handling"""
@@ -327,23 +386,46 @@ class HomozygosityAnalyser:
         >>> variants_df, windows_df, sample = analyser.process_vcf("data.vcf", False, 8)
     """
     
-    def __init__(self, scorer: HomozygosityScorer, window_size: int = 10000, 
-                 step_size: int = 1000, use_snp_windows: bool = False, 
-                 snp_window_size: int = 200, snp_step_size: int = 20):
+    def __init__(self, scorer: HomozygosityScorer, 
+                 window_size: int = 10000, step_size: int = 1000,
+                 use_snp_windows: bool = False, snp_window_size: int = 200, 
+                 snp_step_size: int = 20, samplesheet_path: str = None):
         self.scorer = scorer
         self.window_size = window_size
         self.step_size = step_size
         self.use_snp_windows = use_snp_windows
         self.snp_window_size = snp_window_size
         self.snp_step_size = snp_step_size
+        
+        # Load samplesheet for name mapping
+        self.sample_mapping = load_samplesheet(samplesheet_path) if samplesheet_path else {}
+        self._validate_config()
     
-    def _infer_samples(self, vcf_path: str) -> Tuple[str, List[str]]:
-        """Infer sample (first) and references (rest) from VCF"""
+    def _infer_samples(self, vcf_path: str) -> Tuple[str, List[str], str]:
+        """
+        Infer sample and reference names from VCF, return display name.
+        
+        Returns:
+            Tuple of (vcf_sample_name, ref_samples_list, display_name)
+        """
         with pysam.VariantFile(vcf_path) as vcf:
-            samples = [s for s in vcf.header.samples if ':' not in s]  # Skip duplicates
+            samples = [s for s in vcf.header.samples if ':' not in s]
             if len(samples) < 2:
                 raise ValueError("VCF must contain at least 2 samples")
-            return samples[0], samples[1:]
+            
+            vcf_sample_name = samples[0]
+            ref_samples = samples[1:]
+            
+            # Find display name from samplesheet
+            display_name = vcf_sample_name
+            if self.sample_mapping:
+                # Reverse lookup: find sample_identity for this VCF sample
+                for identity, vcf_name in self.sample_mapping.items():
+                    if vcf_name == vcf_sample_name:
+                        display_name = identity
+                        break
+            
+            return vcf_sample_name, ref_samples, display_name
     
     def _get_chromosomes(self, vcf_path: str) -> List[str]:
         """Extract chromosome list from VCF header"""
@@ -480,10 +562,11 @@ class HomozygosityAnalyser:
             ncpu: Number of CPU cores for parallel processing (one per chromosome optimal)
         
         Returns:
-            Tuple of (combined_variants_df, combined_windows_df, sample_name)
+            Tuple of (combined_variants_df, combined_windows_df, sample_name, display_name)
             - combined_variants_df: All per-variant counts across genome
             - combined_windows_df: All window scores across genome
             - sample_name: Name of mutant sample
+            - display_name: Name shown on display
         
         Raises:
             ValueError: If VCF has <2 samples or samples not found in header
@@ -493,14 +576,17 @@ class HomozygosityAnalyser:
             >>> vars_df, wins_df, sample = analyser.process_vcf("input.vcf", False, 8)
             >>> print(f"Analyzed {len(wins_df)} windows for sample {sample}")
         """
-        sample_name, ref_samples = self._infer_samples(vcf_path)
+        vcf_sample_name, ref_samples, display_name = self._infer_samples(vcf_path)
         chroms = self._get_chromosomes(vcf_path)
+        self._validate_samples(vcf_path, vcf_sample_name, ref_samples)
         
         print(f"Processing {len(chroms)} chromosomes with {ncpu} cores")
-        print(f"Sample: {sample_name}")
+        print(f"VCF Sample: {vcf_sample_name}")
+        print(f"Display Name: {display_name}")
         print(f"References: {ref_samples}")
         print(f"Scorer: {self.scorer.get_name()}")
         
+        # Process chromosomes in parallel
         with Pool(ncpu) as pool:
             process_func = partial(self._process_chromosome, vcf_path, all_variants=all_variants)
             results = list(tqdm(pool.imap(process_func, chroms), total=len(chroms), 
@@ -513,7 +599,7 @@ class HomozygosityAnalyser:
         combined_windows = pd.concat(all_windows_dfs, ignore_index=True) if all_windows_dfs else pd.DataFrame()
         
         print(f"Found {len(combined_variants)} variants across all chromosomes")
-        return combined_variants, combined_windows, sample_name
+        return combined_variants, combined_windows, vcf_sample_name, display_name
 
 def write_bedgraph(df: pd.DataFrame, output_file: str, track_name: str, description: str):
     """
@@ -539,12 +625,20 @@ def write_bedgraph(df: pd.DataFrame, output_file: str, track_name: str, descript
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Homozygosity mapping with Henke-style scoring",
+        description="""
+        Homozygosity mapping with Henke-style scoring.  
+        Identifies regions where mutant is homozygous 
+        while references are heterozygous. 
+        Python implementation of the scorer published in Henke et al, 2013: 
+        https://doi.org/10.1016/j.ymeth.2013.05.015. 
+        Please also cite the manuscript if using this software.
+        """,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
     parser.add_argument('vcf_path', help='Input VCF file')
     parser.add_argument('output_prefix', help='Output file prefix')
+    parser.add_argument('samplesheet', help='Samplesheet TSV for sample name mapping')    
     parser.add_argument('-c', '--min_coverage', type=int, default=1,
                        help='Minimum coverage threshold')
     parser.add_argument('-t', '--homozygosity_threshold', type=float, default=0.85,
@@ -569,6 +663,8 @@ def main():
                        help='Number of CPUs')
     parser.add_argument('-j', '--variant_json', type=str, default=None,
                        help='Variant JSON file to add homozygosity tracks to')
+    parser.add_argument('--overwrite_homozygosity', action='store_true', default=True,
+                       help='Overwrite existing homozygosity data in JSON')    
     
     args = parser.parse_args()
     
@@ -584,10 +680,11 @@ def main():
             step_size=args.step_size,
             use_snp_windows=args.use_snp_windows,
             snp_window_size=args.snp_window_size,
-            snp_step_size=args.snp_step_size
+            snp_step_size=args.snp_step_size,
+            samplesheet_path=args.samplesheet,
         )
         
-        variants_df, windowed_df, sample_name = analyser.process_vcf(
+        variants_df, windowed_df, vcf_sample_name, display_name = analyser.process_vcf(
             args.vcf_path, args.all_variants, args.ncpu
         )
         
@@ -598,8 +695,8 @@ def main():
         window_file = f"{args.output_prefix}_windows.bedgraph"
         window_type = "SNP" if args.use_snp_windows else "BP"
         write_bedgraph(windowed_df, window_file,
-                      f"{sample_name}_{scorer.get_name()}",
-                      f"Henke homozygosity score ({window_type} windows)")
+                      f"{display_name}_{scorer.get_name()}",
+                      f"Homozygosity score ({window_type} windows)")
         
         # Generate TDF if fasta index provided
         tdf_file = None
@@ -615,7 +712,8 @@ def main():
                 tdf_file,
                 window_file,
                 args.window_size,
-                sample_name
+                display_name,
+                overwrite=args.overwrite_homozygosity
             )
             print(f"\n✓ Homozygosity track added to {args.variant_json}")
             print("  The variant viewer will now show homozygosity mapping alongside BAM tracks")
