@@ -1,11 +1,30 @@
 
 #!/usr/bin/env python3
+from dotenv import load_dotenv
 from flask import Flask, jsonify, send_from_directory, send_file, Response
+from flask_httpauth import HTTPBasicAuth
+from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import json
 import requests
 
+load_dotenv()
 app = Flask(__name__)
+auth = HTTPBasicAuth()
+
+users = {
+    "admin": generate_password_hash(os.getenv('FLASK_PASSWORD'))
+}
+
+@auth.verify_password
+def verify_password(username, password):
+    if username in users and check_password_hash(users.get(username), password):
+        return username
+
+@app.before_request
+def require_login():
+    if not auth.current_user():
+        return auth.login_required(lambda: None)()
 
 @app.route('/')
 def index():
