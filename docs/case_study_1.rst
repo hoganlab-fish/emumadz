@@ -770,40 +770,10 @@ Visualising data
 Preparing data for visualisation
 ********************************
 
-Visualise mutation hotspots (genome-level visualisation)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The aim is to `visualise homozygosity hotspots across the entire genome`. This allows a user to "zoom in" on hotspots for further investigation. Complements and acts as a second layer of validation for base-level visualisation.
-
-
-
-.. hint::
-    This step can be performed directly ``vcf`` files are merged. It is located in the visualisation section for convenient reference.
-
 Visualise individual SNPs (single base level resolution)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The aim is to `visualise all reads at each SNP position`. This allows a user to investigate individual SNPs at single base level resolution. Complements and acts as a second layer of validation for genome-level visualisation. 
-
-.. code-block:: shell
-
-    prep_tdf() {
-        local sample=$1
-        local infile_dir="${RESULTS_DIR}/05_samples_merged/"
-        local outfile_dir="${RESULTS_DIR}/10_visualisations/"
-
-        python calculate_homozygosity.py \
-            "${infile_dir}/${sample}.vcf.gz" \
-            "${SAMPLESHEET}" \
-            "${outfile_dir}/${sample}.csv" \
-            --coverage_report "${outfile_dir}/${sample}_coverage.csv" \
-            --chrom_mapping ${CHROM_MAP} \
-            --force_overwrite
-    }
-    
-    for sample in "${MUT_SAMPLES[@]}"; do 
-        prep_tdf $sample
-    done
+The aim is to `visualise all reads at each SNP position`. This allows a user to investigate individual SNPs at single base level resolution. Complements and acts as a layer of validation for genome-level visualisation. 
 
 The tables generated here contain all the necessary information which can be visualised in the user's method of choice (e.g. ``R`` or ``pandas`` dataframes.) The ``bam`` files (subsetted or full) can be viewed in the user's genomic browser of choice, e.g. ``IGV``, ``JBrowse``, ``gosling``.
 
@@ -835,6 +805,37 @@ Visualising the entire genome is ideal but the size of the alignment data makes 
     done
 
 The tables generated here contain all the necessary information which can be visualised in the user's method of choice (e.g. ``R`` or ``pandas`` dataframes.) The ``bam`` files (subsetted or full) can be viewed in the user's genomic browser of choice, e.g. ``IGV``, ``JBrowse``, ``gosling``.
+
+Visualise mutation hotspots (genome-level visualisation)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The aim is to `visualise homozygosity hotspots across the entire genome`. This allows a user to "zoom in" on hotspots for further investigation. Complements and acts as a layer of validation for base-level visualisation.
+
+.. code-block:: shell
+
+    prep_tdf() {
+        local sample=$1
+        local infile_dir="${RESULTS_DIR}/06_snps_filtered/"
+        local outfile_dir="${RESULTS_DIR}/10_visualisations/"
+
+        python plot_homozygosity.py \
+            "${infile_dir}/${sample}.vcf.gz" \
+            ${sample} \
+            -i ${REF_FIXED_FA} \
+            -t 0.85 \
+            -n 16
+    }
+    
+    for sample in "${MUT_SAMPLES[@]}"; do 
+        prep_tdf $sample
+    done
+
+We use the scoring algorithm described in `Henke et al., 2013`_.
+
+.. _Henke et al., 2013: https://doi.org/10.1016/j.ymeth.2013.05.015
+
+.. note::
+    In theory, this step can be performed directly after ``vcf`` files are merged and SNPs are filtered out. This is ok if you want to generate independent tdf files for your own use. However, in the context of this pipeline, data is appended to ``json`` files created in the previous step.
 
 .. tip::
 
