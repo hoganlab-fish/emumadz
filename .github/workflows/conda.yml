@@ -37,8 +37,12 @@ jobs:
     
     - name: Build conda package
       shell: bash -l {0}
+      env:
+        CONDA_BLD_PATH: /tmp/conda-bld
       run: |
-        conda build . --output-folder build --no-verify
+        conda build . --no-verify
+        mkdir -p build
+        cp -r /tmp/conda-bld/noarch build/
     
     - name: Install anaconda-client
       if: success()
