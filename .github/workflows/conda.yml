@@ -27,6 +27,7 @@ jobs:
       shell: bash -l {0}
       run: |
         conda config --set solver libmamba
+        conda config --set anaconda_upload no
 
     - name: Install conda-build and anaconda-client
       shell: bash -l {0}
