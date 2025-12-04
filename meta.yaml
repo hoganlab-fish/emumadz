@@ -1,16 +1,19 @@
 # emumadz
 package:
   name: emumadz
-  version: "0.2.0"
+  version: "1.0.0"
 
 source:
-  path: .
+  git_url: https://github.com/hoganlab-fish/emumadz
+  git_rev: main
 
 build:
   number: 0
   noarch: python
+  script: python -m pip install . --no-deps --ignore-installed -vv
   entry_points:
-    - emumadz = parse_vcf:main
+    - parse_vcf = emumadz.parse_vcf:main
+    - plot_homozygosity = emumadz.plot_homozygosity:main
 
 requirements:
   host:
@@ -19,14 +22,18 @@ requirements:
     - pip
   run:
     - python >=3.9
-    - bcftools =1.19
-    - gatk4 =4.5.0.0
-    - pandas =2.0.0
+    - bcftools >=1.19
+    - gatk4 >=4.5.0.0
+    - pandas >=2.0.0
     - pysam >=0.16.0
-    - samtools =1.19.2
-    - snpeff =5.2
-    - ensembl-vep =114.2
-    - perl >=5.32.1
+    - samtools
+    - snpeff >=5.2
+    - ensembl-vep >=114.2
+    - igv >=2.19.7
+    - igvtools >=2.17.3
+    - tqdm >=4.67.1
+    - htslib
+    - perl
     - perl-dbi >=1.643
     - perl-archive-zip >=1.6.8
     - perl-dbd-mysql >=4.050
@@ -37,19 +44,21 @@ requirements:
     - perl-list-moreutils >=0.430    
 
 test:
-  # imports:
-  #   - emumadz.parse_vcf
+  imports:
+    - parse_vcf
+    - plot_homozygosity
   commands:
-    - emumadz --help
+    - parse_vcf --help
+    - plot_homozygosity --help
 
 about:
-  home: https://github.com/hoganlab-fish/whole_genome_sequencing
+  home: https://github.com/hoganlab-fish/emumadz
   license: MIT
   license_file: LICENSE
   summary: Enhanced MUtation MApping and Detection in Zebrafish
   description: |
-    A conda package for SNP detection.
-  dev_url: https://github.com/hoganlab-fish/whole_genome_sequencing
+    A conda package for SNP detection with interactive visualisation. Developed by the Hogan lab and Bioinformatics Core (RRID:SCR_025901) at the Peter MacCallum Cancer Centre.
+  dev_url: https://github.com/hoganlab-fish/emumadz
 
 extra:
   recipe-maintainers:

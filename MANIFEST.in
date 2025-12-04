@@ -1,0 +1,15 @@
+graft emumadz
+include pyproject.toml
+include LICENSE
+prune data
+prune test
+prune docs
+prune build
+prune nextflow
+prune paper
+prune results.*
+prune source
+prune test
+prune vis
+prune .git
+prune .github
