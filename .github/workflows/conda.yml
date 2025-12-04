@@ -19,10 +19,15 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
-        python-version: ">=3.9"
+        python-version: "3.9"
         channels: conda-forge,bioconda,defaults
         channel-priority: strict
     
+    - name: Configure conda
+      shell: bash -l {0}
+      run: |
+        conda config --set solver libmamba
+
     - name: Install conda-build and anaconda-client
       shell: bash -l {0}
       run: |
