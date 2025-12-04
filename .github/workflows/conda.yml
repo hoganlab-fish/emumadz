@@ -37,7 +37,7 @@ jobs:
     - name: Build conda package
       shell: bash -l {0}
       run: |
-        conda build . --no-anaconda-upload --output-folder build
+        conda build . --output-folder build
     
     - name: Upload to Anaconda
       shell: bash -l {0}
