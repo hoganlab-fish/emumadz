@@ -15,6 +15,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Remove .github directory
+      run: rm -rf .github
+    
     - name: Setup Miniconda
       uses: conda-incubator/setup-miniconda@v3
       with:
@@ -34,6 +37,7 @@ jobs:
       shell: bash -l {0}
       run: |
         conda install -y conda-build
+        conda remove -y anaconda-client --force || true
     
     - name: Build conda package
       shell: bash -l {0}
