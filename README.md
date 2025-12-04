@@ -18,6 +18,10 @@
     <img src="https://img.shields.io/docker/pulls/tyronechen/pysam_pandas?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Pulls">
 </a>
 
+<a href="https://doi.org/10.5281/zenodo.17810567">
+    <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.17810567.svg?style=for-the-badge" alt="Zenodo">
+</a>
+
 <a href="https://biomedicalsciences.unimelb.edu.au/sbs-research-groups/anatomy-and-physiology-research/stem-cell-and-developmental-biology/hogan-laboratory-vascular-developmental-genetics-and-cell-biology">
     <img src="https://img.shields.io/badge/Website-hoganlab-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white" alt="Website">
 </a>
