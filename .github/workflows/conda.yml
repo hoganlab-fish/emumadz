@@ -32,12 +32,12 @@ jobs:
     - name: Install conda-build and anaconda-client
       shell: bash -l {0}
       run: |
-        conda install -y conda-build anaconda-client
+        conda install -y conda-build anaconda-client conda-verify
     
     - name: Build conda package
       shell: bash -l {0}
       run: |
-        conda build . --no-anaconda-upload
+        conda build . --no-anaconda-upload --output-folder build emumadz/
     
     - name: Upload to Anaconda
       shell: bash -l {0}
@@ -45,4 +45,6 @@ jobs:
         ANACONDA_USERNAME: ${{ secrets.ANACONDA_USERNAME }}      
         ANACONDA_PASSWORD: ${{ secrets.ANACONDA_PASSWORD }}
       run: |
-        anaconda -t $ANACONDA_PASSWORD upload -u $ANACONDA_USERNAME ~/miniconda3/envs/test/conda-bld/noarch/emumadz-*.tar.bz2
+        for build in $(find build -name "emumadz*tar.bz2"); do
+          anaconda -t $ANACONDA_PASSWORD upload -u $ANACONDA_USERNAME ~/miniconda3/envs/test/conda-bld/noarch/emumadz-*.tar.bz2
+        done
