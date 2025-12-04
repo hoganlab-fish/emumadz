@@ -28,6 +28,7 @@ jobs:
       run: |
         conda config --set solver libmamba
         conda config --set anaconda_upload no
+        echo "verify: False" >> ~/.condarc
 
     - name: Install conda-build and anaconda-client
       shell: bash -l {0}
