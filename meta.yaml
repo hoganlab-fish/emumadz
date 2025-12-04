@@ -6,7 +6,7 @@ package:
 source:
   git_url: https://github.com/hoganlab-fish/emumadz.git
   git_rev: v1.0.0
-  git_depth: 0
+  git_depth: 1
 
 build:
   number: 0
