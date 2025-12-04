@@ -18,7 +18,7 @@ project = 'EMUMADZ'
 # Enhanced MUtation MApping and Detection in Zebrafish
 # '2025, Tyrone Chen, Richard Lupat, Michelle Meier, Maia Zethoven, Greg Baillie, Scott Paterson, Oguzhan Baltaci, Cas Simons, Jason Li, Andrew Cox, Kelly Smith, Benjamin Hogan'
 
-release = '0.2.0'
+release = '1.0.0'
 
 authors = [
     ("Tyrone Chen",     "0000-0002-9207-0385"),
