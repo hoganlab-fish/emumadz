@@ -44,5 +44,4 @@ jobs:
         ANACONDA_USERNAME: ${{ secrets.ANACONDA_USERNAME }}      
         ANACONDA_PASSWORD: ${{ secrets.ANACONDA_PASSWORD }}
       run: |
-        PACKAGE=$(conda build . --output)
-        anaconda -t $ANACONDA_PASSWORD upload -u $ANACONDA_USERNAME $PACKAGE
+        anaconda -t $ANACONDA_PASSWORD upload -u $ANACONDA_USERNAME ~/miniconda3/envs/test/conda-bld/noarch/emumadz-*.tar.bz2
