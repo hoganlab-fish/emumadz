@@ -25,9 +25,9 @@ requirements:
     - bcftools >=1.19
     - gatk4 >=4.5.0.0
     - pandas >=2.0.0
-    - pysam
+    - pysam >=0.16.0
     - samtools
-    - snpeff
+    - snpeff >=5.2
     - ensembl-vep >=114.2
     - igv >=2.19.7
     - igvtools >=2.17.3
