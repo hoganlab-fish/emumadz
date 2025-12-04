@@ -38,7 +38,7 @@ jobs:
     - name: Build conda package
       shell: bash -l {0}
       run: |
-        conda build . --no-anaconda-upload
+        conda build . --no-anaconda-upload --no-verify
     
     - name: Upload to Anaconda
       shell: bash -l {0}
