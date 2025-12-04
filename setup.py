@@ -8,8 +8,8 @@ setup(
     package_dir={"../": "emumadz"},
     entry_points={
         'console_scripts': [
-            'emumadz=emumadz.parse_vcf:main',
-            'emumadz=emumadz.plot_homozygosity:main',
+            'parse_vcf=emumadz.parse_vcf:main',
+            'plot_homozgyosity=emumadz.plot_homozygosity:main',
         ],
     },
     python_requires=">=3.9",
