@@ -44,4 +44,5 @@ jobs:
         ANACONDA_USERNAME: ${{ secrets.ANACONDA_USERNAME }}      
         ANACONDA_PASSWORD: ${{ secrets.ANACONDA_PASSWORD }}
       run: |
-        anaconda -t $ANACONDA_PASSWORD upload -u $ANACONDA_USERNAME $(conda build . --output)
+        PACKAGE=$(conda build . --output)
+        anaconda -t $ANACONDA_PASSWORD upload -u $ANACONDA_USERNAME $PACKAGE
