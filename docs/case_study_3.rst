@@ -87,10 +87,25 @@ We align paired end reads to the genome with ``bwa-mem``.
 
     while read R1 R2; do
         SAMPLE=$(basename ${R1} | sed 's/_R1.*//' | sed 's/.R1.*//')
-        bwa mem -t ${THREADS} ${REF_GENOME} ${R1} ${R2} | \
+        bwa mem -R "@RG\tID:${SAMPLE}\tSM:${SAMPLE}\tPL:ILLUMINA\tLB:${SAMPLE}" \
+            -t ${THREADS} ${REF_GENOME} ${R1} ${R2} | \
             samtools sort -@ ${THREADS} -o ${OUTPUT_DIR}/${SAMPLE}.bam -
         samtools index ${OUTPUT_DIR}/${SAMPLE}.bam
     done < ${INPUT_FILE}
+
+.. note::
+
+    If ``bwa mem`` was run without the ``-R``, then the following can be used to add the header back in.
+
+.. code-block:: shell
+
+    for i in *bam; do
+        SAMPLE=$(echo ${i} | sed "s|.bam||")
+        samtools addreplacerg -@ 15 -r \
+            "@RG\tID:${SAMPLE}\tSM:${SAMPLE}\tPL:ILLUMINA\tLB:${SAMPLE}" \
+            --write-index -o ../${i} ${i}
+        samtools index -b -@ 15 ../${i}
+    done
 
 Data setup
 ++++++++++
