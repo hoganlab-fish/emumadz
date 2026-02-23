@@ -151,8 +151,14 @@ Here we setup the file structure and some other metadata.
 .. code-block:: shell
 
     # until step 3, this doesnt matter because all files are treated independently
-    ids="12-2-5-F 245-2-1-F 261-C-B-B 262-5-8-1 263-2-A-C 282-2-1-1 32-1-B-Mut 350-A-4-C 95-2-A-Mut Dut-Mut"
-    SAMPLESHEETS=$(for i in $ids; do echo samplesheet.F2-F2.20260123.$i.tsv; done)
+    ids="12-2-5-F 245-2-1-F 261-C-B-B 262-5-8-1 263-2-A-C 282-2-1-1 32-1-B 350-A-4-C 95-2-A Dut"
+    for i in ${ids}; do
+        out="samplesheet.F2-F2.${i}.tsv"
+        printf "sample_identity\talignment_file\tsample_type\n" > ${out}
+        grep ${i} samplesheet.F2-F2.20260123.tsv | \
+            sed -E "s/-Mut_S[0-9]+|-Sib_S[0-9]+//" >> ${out}
+    done
+    SAMPLESHEETS=$(for i in $ids; do echo samplesheet.F2-F2.$i.tsv; done)
 
     # convenience function since it will be used in most downstream operations
     setup() {
