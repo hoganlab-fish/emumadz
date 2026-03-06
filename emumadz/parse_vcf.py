@@ -388,6 +388,12 @@ class VCFParser:
             return False, "Subset BAM file not found"
         
         with pysam.AlignmentFile(subset_path, "rb") as bam:
+            # create index if it doesnt exist and reopen to load
+            if not bam.has_index():
+                pysam.sort("-o", subset_path, subset_path)
+                pysam.index(subset_path)
+                bam = pysam.AlignmentFile(subset_path, "rb")
+            
             coverage_info = {}
             
             for chrom, pos in expected_variants:
