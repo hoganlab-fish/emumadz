@@ -234,7 +234,6 @@ class VCFParser:
         """
         reference_bam_files = {}
         print(f"Reference samples: {self.reference_samples}")
-        print(f"Variant positions: {variant_positions}")
 
         for ref_sample_id, ref_bam_file in self.reference_samples.items():
             print(f"Checking {ref_bam_file} exists: {os.path.exists(ref_bam_file)}")
@@ -242,7 +241,9 @@ class VCFParser:
                 continue
 
             output_path = os.path.join(subset_path, f"{ref_sample_id}_reference.bam")
-            
+            print(f"File exists: {os.path.exists(output_path)}, \
+                  force_overwrite: {force_overwrite}")
+
             # Skip if already exists
             if os.path.exists(output_path) and not force_overwrite:
                 reference_bam_files[ref_sample_id] = f"{ref_sample_id}_reference.bam"
@@ -250,6 +251,7 @@ class VCFParser:
                 
             # Pass ALL variant positions to create_bam_subset, not just the first one
             success = self.create_bam_subset(ref_bam_file, variant_positions, output_path)
+            print(f"Success: {success}")
             if success:
                 reference_bam_files[ref_sample_id] = f"{ref_sample_id}_reference.bam"
         
