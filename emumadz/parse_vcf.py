@@ -630,9 +630,8 @@ class VCFParser:
         # Create BAM subsets if requested
         if subset_path and len(data) > 0:
             # Create shared reference BAMs first if chromosome mapping is provided
-            if self.chrom_mapping and self.reference_samples:
-                all_variants = [(row['chromosome'], row['position']) for _, row in data.iterrows()]
-                self.create_reference_bam_subsets(subset_path, all_variants)
+            all_variants = [(row['chromosome'], row['position']) for _, row in data.iterrows()]
+            self.create_reference_bam_subsets(subset_path, all_variants)
             
             self._create_bam_subsets(data, subset_path, max_workers, force_overwrite)
             
