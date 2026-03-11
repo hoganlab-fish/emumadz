@@ -233,8 +233,11 @@ class VCFParser:
         :rtype: Dict[str, str]
         """
         reference_bam_files = {}
+        print(f"Reference samples: {self.reference_samples}")
+        print(f"Variant positions: {variant_positions}")
 
         for ref_sample_id, ref_bam_file in self.reference_samples.items():
+            print(f"Checking {ref_bam_file} exists: {os.path.exists(ref_bam_file)}")
             if not os.path.exists(ref_bam_file):
                 continue
 
