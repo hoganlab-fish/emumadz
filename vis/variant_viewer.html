@@ -1380,8 +1380,13 @@
 
         async function viewInIGV(chromosome, position, sampleId) {
             if (igvBrowser) {
-                await igvBrowser.removeAllTracks();
-            }            
+                const toRemove = igvBrowser.trackViews
+                    .filter(tv => tv.track.config && !tv.track.config.isReference && tv.track.type !== 'sequence')
+                    .map(tv => tv.track);
+                for (const track of toRemove) {
+                    await igvBrowser.removeTrack(track);
+                }
+            }           
             showTab('igv');
 
             const selectedGenome = document.getElementById('genomeSelect').value || 'danRer9';
