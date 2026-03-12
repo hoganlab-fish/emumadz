@@ -1,5 +1,6 @@
 
 #!/usr/bin/env python3
+import argparse
 from dotenv import load_dotenv
 from flask import Flask, jsonify, send_from_directory, send_file, Response
 from flask_httpauth import HTTPBasicAuth
@@ -28,7 +29,7 @@ def require_login():
 
 @app.route('/api/sample-names')
 def get_sample_names():
-    mapfile = app.config.get('filename_samplename_map.tsv')
+    mapfile = app.config.get('SAMPLE_MAP_FILE')
     if not mapfile or not os.path.exists(mapfile):
         return jsonify({})
     mapping = {}
@@ -154,4 +155,9 @@ if __name__ == '__main__':
     os.makedirs('data', exist_ok=True)
     os.makedirs('igv-dist', exist_ok=True)
     os.makedirs('igv-genomes/danRer7', exist_ok=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--sample-map', type=str, default=None)
+    args = parser.parse_args()
+
+    SAMPLE_MAP_FILE = args.sample_map
     app.run(host='0.0.0.0', port=5010, debug=True, ssl_context="adhoc")
