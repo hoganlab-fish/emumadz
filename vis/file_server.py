@@ -26,6 +26,19 @@ def require_login():
     if not auth.current_user():
         return auth.login_required(lambda: None)()
 
+@app.route('/api/sample-names')
+def get_sample_names():
+    mapfile = app.config.get('filename_samplename_map.tsv')
+    if not mapfile or not os.path.exists(mapfile):
+        return jsonify({})
+    mapping = {}
+    with open(mapfile) as f:
+        for line in f:
+            parts = line.strip().split('\t')
+            if len(parts) >= 2:
+                mapping[parts[0]] = parts[1]  # filename -> display name
+    return jsonify(mapping)
+
 @app.route('/')
 def index():
     return send_file('variant_viewer.html')

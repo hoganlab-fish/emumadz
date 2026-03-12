@@ -668,6 +668,22 @@
         let fileList = [];
         let genomeConfig = null;
 
+        async function loadSampleNames() {
+            try {
+                const res = await fetch('/api/sample-names');
+                sampleNameMap = await res.json();
+            } catch (e) {
+                sampleNameMap = {};
+            }
+        }
+
+        function getSampleName(file) {
+            if (sampleNameMap[file.name]) return sampleNameMap[file.name];
+            const sampleId = file.name.replace('.json', '');
+            const dashIndex = sampleId.indexOf('-');
+            return dashIndex !== -1 ? sampleId.substring(dashIndex + 1) : sampleId;
+        }
+
         document.querySelectorAll('.tooltip-container').forEach(container => {
             const icon = container.querySelector('.tooltip-icon');
             const tooltip = container.querySelector('.tooltip-text');
@@ -683,8 +699,11 @@
         });        
 
         // Auto-load file list on page load
-        window.addEventListener('load', loadFileList);
-        
+        window.addEventListener('load', async () => {
+            await loadSampleNames();
+            loadFileList();
+        });
+
         // Load file list from server
         function loadFileList() {
             fetch('/api/files')
@@ -720,8 +739,7 @@
                 const sampleId = file.name.replace('.json', '');
                 
                 // Generate sample name by taking everything after the first "-"
-                const dashIndex = sampleId.indexOf('-');
-                const sampleName = dashIndex !== -1 ? sampleId.substring(dashIndex + 1) : '';
+                const sampleName = getSampleName(file);
                 
                 return `
                     <tr>
