@@ -758,6 +758,10 @@
                 .then(response => response.json())
                 .then(data => {
                     variantData = data;
+                    if (igvBrowser) {
+                        igvBrowser.currentVariant = null;
+                        igvBrowser.removeAllTracks();
+                    }                    
                     filteredData = [...variantData];
                     document.getElementById('currentFileName').textContent = filename;
                     // Update sample info in header
@@ -1375,6 +1379,9 @@
         }
 
         async function viewInIGV(chromosome, position, sampleId) {
+            if (igvBrowser) {
+                await igvBrowser.removeAllTracks();
+            }            
             showTab('igv');
 
             const selectedGenome = document.getElementById('genomeSelect').value || 'danRer9';
