@@ -1467,13 +1467,11 @@
                 }
             }
             // Load homozygosity track if available
-            if (variant.homozygosity_track) {
-                const homozTrack = {
-                    ...variant.homozygosity_track,
-                    url: '/data/' + variant.homozygosity_track.url
-                };
-                tracks.push(homozTrack);
-                console.log('Loading homozygosity track:', homozTrack.url);
+            if (variant.homozygosity_tracks) {
+                variant.homozygosity_tracks.forEach(track => {
+                    tracks.push({ ...track, url: '/data/' + track.url });
+                console.log('Loading homozygosity track:', track.url);
+                });
             }            
             tracks.push({
                 type: 'annotation',
