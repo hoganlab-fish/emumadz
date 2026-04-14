@@ -832,7 +832,7 @@ Ensure that contigs and scaffolds are removed.
             > "${k}_head"
         samtools reheader "${k}_head" "${k}" > "${i}"
         samtools index -@ ${THREADS} "${i}"
-        rm "${j}" "${k}"
+        rm "${j}" "${k}" "${i}_head" "${k}_head"
     done
 
 Visualise individual SNPs (single base level resolution)
