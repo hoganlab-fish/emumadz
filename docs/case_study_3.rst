@@ -857,14 +857,29 @@ Ensure that contigs and scaffolds are removed.
 
 .. code-block:: shell
 
-    CHRS=$(seq 1 25 | sed 's/^/chr/' | tr '\n' ' ')
-    for i in $(find . -type f -name "*bam"); do
-        j="${i%.bam}_filtered.bam"
-        samtools view -@ 16 -b -o "${j}" "${i}" ${CHRS};
-        samtools view -@ 16 -H "${j}" | \
-            grep -v "Zv9_scaffold" | \
-            grep -v "whole_genome_shotgun" > "${j}_head"
-        samtools reheader "${j}_head" "$j" > "${i}"
+    THREADS=16
+    for i in $(find . -type f -name "*.bam"); do
+        j="${i%.bam}_remap1.bam"
+        k="${i%.bam}_remap2.bam"
+        
+        # remap chromosome names in header first
+        samtools view -@ ${THREADS} -H "${i}" | \
+            awk 'NR==FNR{map[$1]=$2; next} {for(old in map) gsub(old, map[old])} 1' \
+            ${CHROM_MAP} - > "${i}_head"
+        samtools reheader "${i}_head" "${i}" > "${j}"
+        samtools index -@ ${THREADS} "${j}"
+        
+        # now filter to chr1-25
+        CHRS=$(seq 1 25 | sed 's/^/chr/' | tr '\n' ' ')
+        samtools view -@ ${THREADS} -b -o "${k}" "${j}" ${CHRS}
+
+        # rework headers
+        samtools view -@ ${THREADS} -H "${k}" | \
+            awk '/^@SQ/{if($0 ~ /SN:chr([1-9]|1[0-9]|2[0-5])\t/) print; next} {print}' \
+            > "${k}_head"
+        samtools reheader "${k}_head" "${k}" > "${i}"
+        samtools index -@ ${THREADS} "${i}"
+        rm "${j}" "${k}"
     done
 
 Visualise individual SNPs (single base level resolution)
