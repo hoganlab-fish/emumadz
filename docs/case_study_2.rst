@@ -806,6 +806,20 @@ Visualising data
 Preparing data for visualisation
 ********************************
 
+Ensure that contigs and scaffolds are removed.
+
+.. code-block:: shell
+
+    CHRS=$(seq 1 25 | sed 's/^/chr/' | tr '\n' ' ')
+    for i in $(find . -type f -name "*bam"); do
+        j="${i%.bam}_filtered.bam"
+        samtools view -@ 16 -b -o "${j}" "${i}" ${CHRS};
+        samtools view -@ 16 -H "${j}" | \
+            grep -v "Zv9_scaffold" | \
+            grep -v "whole_genome_shotgun" > "${j}_head"
+        samtools reheader "${j}_head" "$j" > "${i}"
+    done
+
 Visualise individual SNPs (single base level resolution)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
