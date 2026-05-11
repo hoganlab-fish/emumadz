@@ -1329,31 +1329,18 @@
             setFilterControlsEnabled(tabName === 'table');
         }     
 
-        function restrictIGVToMainChromosomes(browser, genomeType) {
-            const isZebrafish = genomeType.startsWith('danRer');
-            const mainSet = new Set(
-                isZebrafish
-                    ? Array.from({length: 25}, (_, i) => `chr${i+1}`).concat(['chrX','chrY','chrM','chrMT'])
-                    : Array.from({length: 22}, (_, i) => `chr${i+1}`).concat(['chrX','chrY','chrM','chrMT'])
-            );
-
-            // Wait for genome to be fully loaded, then patch chromosome list
-            const patch = () => {
-                if (!browser.genome || !browser.genome.chromosomeNames) {
-                    setTimeout(patch, 200);
-                    return;
-                }
-                browser.genome.chromosomeNames = browser.genome.chromosomeNames.filter(c => mainSet.has(c));
-                Object.keys(browser.genome.chromosomes || {}).forEach(c => {
-                    if (!mainSet.has(c)) delete browser.genome.chromosomes[c];
-                });
-                // Force navbar chromosome dropdown to re-render if it exists
-                browser.genome.wgChromosomeNames = browser.genome.chromosomeNames;
-                if (browser.chromAliasBrowser) {
-                    browser.chromAliasBrowser = null;
-                }
-            };
-            patch();
+        function getMainChromosomes(genomeName) {
+            let chrCount, extras;
+            if (genomeName.startsWith('danRer')) {
+                chrCount = 25; extras = ['chrM'];
+            } else if (genomeName.startsWith('hg') || genomeName.startsWith('GRCh')) {
+                chrCount = 22; extras = ['chrX', 'chrY', 'chrM'];
+            } else if (genomeName.startsWith('mm')) {
+                chrCount = 19; extras = ['chrX', 'chrY', 'chrM'];
+            } else {
+                chrCount = 25; extras = ['chrM']; // sensible fallback
+            }
+            return [...Array.from({length: chrCount}, (_, i) => `chr${i + 1}`), ...extras];
         }
 
         function initIGV(genome) {
@@ -1373,11 +1360,13 @@
                             igvDiv.innerHTML = '<div style="color:red;padding:20px;">Custom genome config not found.</div>';
                             return;
                         }
+                        const mainChrs = getMainChromosomes(selectedGenome)
                         const options = {
                             genome: {
                                 fastaURL: genomeConfig.fastaURL,
                                 indexURL: genomeConfig.indexURL,
-                                chromosomeOrder: genomeConfig.chromosomeOrder.split(',').filter(c => /^(chr)?([1-9]|1\d|2[0-5]|X|Y|MT|M)$/i.test(c.trim())),
+                                chromosomeOrder: mainChrs,
+                                whitelistedChromosomes: mainChrs,
                             },
                             locus: 'chr1:1',
                             tracks: [],
@@ -1390,7 +1379,6 @@
                             .then(function (browser) {
                                 igvBrowser = browser;
                                 igvBrowser.genomeName = selectedGenome;
-                                restrictIGVToMainChromosomes(browser, selectedGenome);  // ← here
                                 console.log('IGV browser initialized with custom genome:', selectedGenome);
                             })
                             .catch(function(error) {
@@ -1404,13 +1392,11 @@
                 return;
             }
 
+            const mainChrs = getMainChromosomes(selectedGenome);
             const options = {
                 genome: selectedGenome,
-                chromosomeOrder: (() => {
-                    const zf = Array.from({length: 25}, (_, i) => `chr${i+1}`).concat(['chrX','chrY','chrM']);
-                    const hs = Array.from({length: 22}, (_, i) => `chr${i+1}`).concat(['chrX','chrY','chrM']);
-                    return selectedGenome.startsWith('danRer') ? zf : hs;
-                })(),                
+                chromosomeOrder: mainChrs,
+                whitelistedChromosomes: mainChrs,
                 locus: selectedGenome.startsWith('danRer') ? 'chr1:1' : 'chr1:2',
                 tracks: [],
                 showNavigation: true,
