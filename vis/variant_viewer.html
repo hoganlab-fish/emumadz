@@ -1154,9 +1154,11 @@
         function populateFilters() {
             // Populate chromosome filter with numeric sorting
             const chromosomes = [...new Set(variantData.map(v => v.chromosome))];
-            
+            const mainChrPattern = /^(chr)?([1-9]|1\d|2[0-5]|X|Y|MT|M)$/i;
+            const filteredChromosomes = chromosomes.filter(c => mainChrPattern.test(String(c)));
+
             // Smart chromosome sorting (numeric for numbers, lexicographic for others)
-            chromosomes.sort((a, b) => {
+            filteredChromosomes.sort((a, b) => {
                 // Remove 'chr' prefix if present for comparison
                 const aNum = a.toString().replace(/^chr/i, '');
                 const bNum = b.toString().replace(/^chr/i, '');
@@ -1348,7 +1350,7 @@
                             genome: {
                                 fastaURL: genomeConfig.fastaURL,
                                 indexURL: genomeConfig.indexURL,
-                                chromosomeOrder: genomeConfig.chromosomeOrder.split(','),
+                                chromosomeOrder: genomeConfig.chromosomeOrder.split(',').filter(c => /^(chr)?([1-9]|1\d|2[0-5]|X|Y|MT|M)$/i.test(c.trim())),
                             },
                             locus: 'chr1:1',
                             tracks: [],
