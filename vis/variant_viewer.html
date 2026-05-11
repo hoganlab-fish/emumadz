@@ -1184,7 +1184,7 @@
             
             const chrSelect = document.getElementById('chromosomeFilter');
             chrSelect.innerHTML = '<option value="">All Chromosomes</option>';
-            chromosomes.forEach(chr => {
+            filteredChromosomes.forEach(chr => {
                 chrSelect.innerHTML += `<option value="${chr}">${chr}</option>`;
             });
         }
@@ -1378,6 +1378,11 @@
 
             const options = {
                 genome: selectedGenome,
+                chromosomeOrder: (() => {
+                    const zf = Array.from({length: 25}, (_, i) => `chr${i+1}`).concat(['chrX','chrY','chrM']);
+                    const hs = Array.from({length: 22}, (_, i) => `chr${i+1}`).concat(['chrX','chrY','chrM']);
+                    return selectedGenome.startsWith('danRer') ? zf : hs;
+                })(),                
                 locus: selectedGenome.startsWith('danRer') ? 'chr1:1' : 'chr1:2',
                 tracks: [],
                 showNavigation: true,
