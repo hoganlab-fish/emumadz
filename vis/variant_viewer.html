@@ -1330,17 +1330,14 @@
         }     
 
         function getMainChromosomes(genomeName) {
-            let chrCount, extras;
             if (genomeName.startsWith('danRer')) {
-                chrCount = 25; extras = ['chrM'];
+                return Array.from({length: 25}, (_, i) => `chr${i + 1}`);
             } else if (genomeName.startsWith('hg') || genomeName.startsWith('GRCh')) {
-                chrCount = 22; extras = ['chrX', 'chrY', 'chrM'];
+                return Array.from({length: 22}, (_, i) => `chr${i + 1}`).concat(['chrX', 'chrY', 'chrM']);
             } else if (genomeName.startsWith('mm')) {
-                chrCount = 19; extras = ['chrX', 'chrY', 'chrM'];
-            } else {
-                chrCount = 25; extras = ['chrM']; // sensible fallback
+                return Array.from({length: 19}, (_, i) => `chr${i + 1}`).concat(['chrX', 'chrY', 'chrM']);
             }
-            return [...Array.from({length: chrCount}, (_, i) => `chr${i + 1}`), ...extras];
+            return Array.from({length: 25}, (_, i) => `chr${i + 1}`).concat(['chrM']);
         }
 
         function initIGV(genome) {
