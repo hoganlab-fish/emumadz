@@ -1329,6 +1329,33 @@
             setFilterControlsEnabled(tabName === 'table');
         }     
 
+        function restrictIGVToMainChromosomes(browser, genomeType) {
+            const isZebrafish = genomeType.startsWith('danRer');
+            const mainSet = new Set(
+                isZebrafish
+                    ? Array.from({length: 25}, (_, i) => `chr${i+1}`).concat(['chrX','chrY','chrM','chrMT'])
+                    : Array.from({length: 22}, (_, i) => `chr${i+1}`).concat(['chrX','chrY','chrM','chrMT'])
+            );
+
+            // Wait for genome to be fully loaded, then patch chromosome list
+            const patch = () => {
+                if (!browser.genome || !browser.genome.chromosomeNames) {
+                    setTimeout(patch, 200);
+                    return;
+                }
+                browser.genome.chromosomeNames = browser.genome.chromosomeNames.filter(c => mainSet.has(c));
+                Object.keys(browser.genome.chromosomes || {}).forEach(c => {
+                    if (!mainSet.has(c)) delete browser.genome.chromosomes[c];
+                });
+                // Force navbar chromosome dropdown to re-render if it exists
+                browser.genome.wgChromosomeNames = browser.genome.chromosomeNames;
+                if (browser.chromAliasBrowser) {
+                    browser.chromAliasBrowser = null;
+                }
+            };
+            patch();
+        }
+
         function initIGV(genome) {
             const selectedGenome = genome || document.getElementById('genomeSelect').value || 'danRer7';
 
@@ -1363,6 +1390,7 @@
                             .then(function (browser) {
                                 igvBrowser = browser;
                                 igvBrowser.genomeName = selectedGenome;
+                                restrictIGVToMainChromosomes(browser, selectedGenome);  // ← here
                                 console.log('IGV browser initialized with custom genome:', selectedGenome);
                             })
                             .catch(function(error) {
