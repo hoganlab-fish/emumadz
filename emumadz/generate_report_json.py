@@ -7,7 +7,7 @@ fetched on demand via fetch(). Requires a local HTTP server to view:
     cd report/ && python -m http.server 8000
 
 Usage:
-    python generate_report_json.py <data_dir> [-o report/] [-r 0] [-c 1]
+    python generate_report_json.py <data_dir> [-o report/] [-r 0] [-c 1] [-f reference.fa] [--skip-json]
 """
 
 import argparse, base64, gzip, json, mimetypes, re, sys
@@ -23,7 +23,6 @@ except ImportError:
         for i,item in enumerate(it,1):
             print(f"  {desc} [{i}/{total}]", file=sys.stderr); yield item
 
-
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def parse_args():
@@ -36,8 +35,11 @@ def parse_args():
                    help="Workers for parallel HTML rendering (default: 1)")
     p.add_argument("-g","--gff", default=None,
                    help="Sorted bgzipped+tabix-indexed GFF/GFF3 file (optional)")
+    p.add_argument("-f", "--fasta", default=None,
+                   help="Optional reference genome assembly FASTA (.fna/.fa)")
+    p.add_argument("--skip-json", action="store_true",
+                   help="Skip writing JSON sidecars (re-use existing files for fast UI testing)")
     return p.parse_args()
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -55,7 +57,6 @@ def encode_image(path: Path) -> str:
     return f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode()}"
 
 def find_vcfs(sample_dir: Path) -> list:
-    """Return all VCF/BCF files in sample_dir (following symlinks)."""
     out = []
     for p in sorted(sample_dir.iterdir()):
         n = p.name
@@ -64,11 +65,9 @@ def find_vcfs(sample_dir: Path) -> list:
             out.append(p)
     return out
 
-
 # ── Markdown ──────────────────────────────────────────────────────────────────
 
 def _md_inline(line: str) -> str:
-    """Apply inline markdown: code, bold, italic, links, strikethrough."""
     line = re.sub(r'`([^`]+)`', lambda m: f'<code>{_escape(m.group(1))}</code>', line)
     line = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', line)
     line = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', line)
@@ -78,14 +77,11 @@ def _md_inline(line: str) -> str:
     line = re.sub(r'~~(.+?)~~',     r'<del>\1</del>',        line)
     return line
 
-
 def parse_md(path: Path):
-    """Parse markdown file. Returns (frontmatter_dict, html_body)."""
     if not path.exists(): return {}, ""
     text = path.read_text(errors="replace")
     fm, body = {}, text
 
-    # YAML frontmatter
     m = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
     if m:
         for line in m.group(1).splitlines():
@@ -93,12 +89,7 @@ def parse_md(path: Path):
             if len(kv) == 2: fm[kv[0].strip()] = kv[1].strip()
         body = text[m.end():]
 
-    lines  = body.splitlines()
-    html   = []
-    i      = 0
-    in_ul  = False
-    in_ol  = False
-    in_code= False
+    lines, html, i, in_ul, in_ol = body.splitlines(), [], 0, False, False
 
     def close_lists():
         nonlocal in_ul, in_ol
@@ -108,8 +99,6 @@ def parse_md(path: Path):
     while i < len(lines):
         raw = lines[i]
         line = raw.rstrip()
-
-        # fenced code block
         if line.startswith("```"):
             close_lists()
             lang = line[3:].strip()
@@ -121,30 +110,22 @@ def parse_md(path: Path):
             lang_cls = f' class="language-{_escape(lang)}"' if lang else ""
             html.append(f'<pre><code{lang_cls}>{chr(10).join(code_lines)}</code></pre>')
             i += 1; continue
-
-        # horizontal rule
         if re.match(r'^[-*_]{3,}\s*$', line):
             close_lists(); html.append("<hr>"); i += 1; continue
-
-        # headings
         hm = re.match(r'^(#{1,6})\s+(.*)', line)
         if hm:
             close_lists()
             lvl = len(hm.group(1))
             html.append(f'<h{lvl}>{_md_inline(hm.group(2))}</h{lvl}>')
             i += 1; continue
-
-        # blockquote
         if line.startswith("> "):
             close_lists()
             html.append(f'<blockquote><p>{_md_inline(line[2:])}</p></blockquote>')
             i += 1; continue
-
-        # GFM table (header | header ...)
         if "|" in line and i + 1 < len(lines) and re.match(r'^[\s|:-]+$', lines[i+1]):
             close_lists()
             headers = [c.strip() for c in line.strip().strip("|").split("|")]
-            i += 2  # skip separator
+            i += 2 
             html.append('<table class="md-table"><thead><tr>')
             for h in headers: html.append(f'<th>{_md_inline(h)}</th>')
             html.append('</tr></thead><tbody>')
@@ -156,35 +137,25 @@ def parse_md(path: Path):
                 i += 1
             html.append('</tbody></table>')
             continue
-
-        # unordered list
         if re.match(r'^[-*+] ', line):
             if in_ol: html.append("</ol>"); in_ol = False
             if not in_ul: html.append("<ul>"); in_ul = True
             html.append(f'<li>{_md_inline(line[2:])}</li>')
             i += 1; continue
-
-        # ordered list
         om = re.match(r'^(\d+)\. (.*)', line)
         if om:
             if in_ul: html.append("</ul>"); in_ul = False
             if not in_ol: html.append("<ol>"); in_ol = True
             html.append(f'<li>{_md_inline(om.group(2))}</li>')
             i += 1; continue
-
-        # blank line
         if line == "":
             close_lists(); html.append(""); i += 1; continue
-
-        # paragraph
         close_lists()
         html.append(f'<p>{_md_inline(line)}</p>')
         i += 1
 
     close_lists()
     return fm, "\n".join(html)
-
-
 
 # ── VCF parsing ───────────────────────────────────────────────────────────────
 
@@ -225,6 +196,9 @@ def read_vcf_header(vcf_path: Path):
                 if line.startswith("##"): meta.append(line)
                 elif line.startswith("#CHROM"):
                     cols = line.lstrip("#").split("\t")
+                    # FIX: Truncate columns strictly to discard trailing duplicates
+                    if len(cols) > 11:
+                        cols = cols[:11]
                     if len(cols)>9:
                         samples = [s for s in cols[9:] if not s.startswith("2:")]
                     break
@@ -248,10 +222,24 @@ def stream_rows(vcf_path, col_headers, sample_names, csq_fmt, ann_fmt, max_rows=
                 parts = line.split("\t")
                 if len(parts)<8: continue
                 chrom,pos,_,ref,alt,qual,filt,info_str = parts[:8]
-                scols = parts[9:] if len(parts)>9 else []
+                
+                # FIX: Truncate row split strictly to match headers
+                scols = parts[9:11] if len(parts)>9 else []
+
+                format_col = parts[8].split(":") if len(parts) > 8 else []
+                try: dp_idx = format_col.index("DP")
+                except ValueError: dp_idx = -1
+
                 gt = {}
                 for s,ci in idx.items():
-                    gt[s] = (scols[ci].split(":")[0] if ci<len(scols) else "./.") if scols else "./."
+                    if scols and ci < len(scols):
+                        sdata = scols[ci].split(":")
+                        call = sdata[0] if sdata else "./."
+                        depth = sdata[dp_idx] if dp_idx != -1 and dp_idx < len(sdata) else "?"
+                        gt[s] = f"{call} ({depth}x)"
+                    else:
+                        gt[s] = "./. (?x)"
+                
                 info = _parse_info(info_str)
                 vep = []
                 if csq_fmt and "CSQ" in info:
@@ -272,11 +260,8 @@ def stream_rows(vcf_path, col_headers, sample_names, csq_fmt, ann_fmt, max_rows=
     except Exception as e:
         print(f"  [WARN] parse error {vcf_path.name}: {e}", file=sys.stderr)
 
-
 def write_variant_json(vcf_path, json_path, col_headers, sample_names,
                        csq_fmt, ann_fmt, max_rows=0):
-    """Write columnar JSON sidecar. Returns (n_rows, coord_ranges).
-    coord_ranges: {chrom: (min_pos, max_pos)} — tracked in-memory, no re-read needed."""
     SCALAR = ["chrom","pos","ref","alt","qual","filter","impact","lof","nmd",
               "vep_symbol","vep_consequence","vep_hgvsc","vep_hgvsp",
               "vep_aa","vep_biotype","vep_class",
@@ -284,7 +269,7 @@ def write_variant_json(vcf_path, json_path, col_headers, sample_names,
               "vep_n","ann_n"]
     all_fields = SCALAR + [f"s:{s}" for s in sample_names]
     n = 0
-    coord_ranges = {}   # {chrom: [min_pos, max_pos]}
+    coord_ranges = {}
     with open(json_path,"w",encoding="utf-8") as out:
         out.write('{"fields":'); out.write(json.dumps(all_fields,separators=(',',':'))); out.write(',"rows":[')
         for v in stream_rows(vcf_path,col_headers,sample_names,csq_fmt,ann_fmt,max_rows):
@@ -301,7 +286,6 @@ def write_variant_json(vcf_path, json_path, col_headers, sample_names,
             if n>0: out.write(",")
             out.write(json.dumps(row,separators=(',',':')))
             n += 1
-            # track coord range in-memory
             try:
                 pos = int(v["pos"])
                 c   = v["chrom"]
@@ -314,7 +298,6 @@ def write_variant_json(vcf_path, json_path, col_headers, sample_names,
                 pass
         out.write("]}")
     return n, {c: (r[0], r[1]) for c, r in coord_ranges.items()}
-
 
 # ── Discovery ─────────────────────────────────────────────────────────────────
 
@@ -334,6 +317,54 @@ def discover_samples(data_dir: Path):
         if (d.is_dir() or (d.is_symlink() and d.resolve().is_dir())) and _is_sample_dir(d):
             out.append(d)
     return out
+
+# ── IGV Track Builder ─────────────────────────────────────────────────────────
+
+def get_bam_locus(bam_path: Path) -> str:
+    import subprocess
+    try:
+        idx_res = subprocess.run(["samtools", "idxstats", str(bam_path)], capture_output=True, text=True)
+        best_chrom, max_reads = "", 0
+        for line in idx_res.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3 and int(parts[2]) > max_reads:
+                max_reads, best_chrom = int(parts[2]), parts[0]
+        if not best_chrom: return "all"
+        view_res = subprocess.run(["samtools", "view", str(bam_path), best_chrom], capture_output=True, text=True)
+        first_pos = int(view_res.stdout.splitlines()[0].split("\t")[3])
+        return f"{best_chrom}:{max(1, first_pos - 2000)}-{first_pos + 2000}"
+    except Exception: return "all"
+
+def build_igv_config(sample_dir: Path, fasta_name: str = None) -> str:
+    tracks = []
+    prefix = sample_dir.name
+    
+    go_dir = sample_dir / "genome_overview"
+    if go_dir.is_dir():
+        for f in sorted(go_dir.iterdir()):
+            if f.suffix in [".tdf", ".bedgraph", ".bw"]:
+                fmt = "tdf" if f.suffix == ".tdf" else "bedgraph"
+                tracks.append({"name": f.name, "url": f"{prefix}/genome_overview/{f.name}", "type": "wig", "format": fmt, "order": 10})
+
+    nt_dir = sample_dir / "nucleotide_view"
+    if nt_dir.is_dir():
+        for sub in ["mut", "wt", "sib"]:
+            sub_dir = nt_dir / sub
+            if sub_dir.is_dir():
+                for f in sorted(sub_dir.iterdir()):
+                    if f.suffix == ".bam":
+                        order = 50 if sub == "mut" else 60
+                        tracks.append({"name": f"{sub.upper()}: {f.name}", "url": f"{prefix}/nucleotide_view/{sub}/{f.name}", "indexURL": f"{prefix}/nucleotide_view/{sub}/{f.name}.bai", "format": "bam", "type": "alignment", "order": order})
+
+    if not tracks: return ""
+    locus = "all"
+    first_bam = next((sample_dir.parent / t["url"] for t in tracks if t["format"] == "bam"), None)
+    if first_bam and first_bam.exists(): locus = get_bam_locus(first_bam)
+    
+    config = {"locus": locus, "tracks": tracks}
+    if fasta_name: config["reference"] = {"id": "danRer7_local", "name": "Zebrafish (danRer7)", "fastaURL": fasta_name, "indexURL": f"{fasta_name}.fai"}
+    else: config["reference"] = {"id": "danRer7_ucsc", "name": "Zebrafish (danRer7)", "fastaURL": "https://hgdownload.soe.ucsc.edu/goldenPath/danRer7/bigZips/danRer7.fa.gz", "indexURL": "https://hgdownload.soe.ucsc.edu/goldenPath/danRer7/bigZips/danRer7.fa.gz.fai"}
+    return json.dumps(config)
 
 
 # ── CSS / JS (shared) ─────────────────────────────────────────────────────────
@@ -423,7 +454,7 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
   font-family:var(--sans);transition:background .15s}
 .load-btn:hover{background:rgba(79,142,247,.15)}
 /* filter bar */
-.filter-bar{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-bottom:.75rem;
+.filter-bar{display:flex;flex-wrap:wrap;gap:.8rem;align-items:center;margin-bottom:.75rem;
   padding:.5rem .75rem;background:var(--surf2);border-radius:var(--r);border:1px solid var(--brd)}
 .filter-bar span{color:var(--muted);font-size:12px;margin-right:.25rem}
 .f-btn{background:var(--bg);border:1px solid var(--brd);color:var(--muted);
@@ -433,17 +464,26 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
   padding:.25rem .6rem;border-radius:var(--r);font-size:12px;width:220px;margin-left:auto}
 .search-box:focus{outline:1px solid var(--acc)}
 /* variant table */
-.tbl-scroll{overflow-x:auto}
-.var-table{width:100%;border-collapse:collapse;font-size:12px;min-width:900px}
-.var-table th{background:var(--surf2);padding:.4rem .6rem;text-align:left;
+.tbl-scroll{overflow-x:auto; max-width: 100vw;}
+.var-table{width: max-content;border-collapse:collapse;font-size:12px;min-width:100%;table-layout: auto;}
+.var-table th{background:var(--surf2);padding:10px 12px;text-align:left;
   border-bottom:1px solid var(--brd);color:var(--muted);font-size:11px;
-  text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;position:sticky;top:0}
-.var-table td{padding:.35rem .6rem;border-bottom:1px solid var(--brd);vertical-align:top}
-.var-row{cursor:default}
+  text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;position:sticky;top:0;z-index:10;cursor:pointer;}
+.var-table th:hover{color:var(--txt);}
+.var-table td{padding:.4rem .6rem;border-bottom:1px solid var(--brd);vertical-align:middle; white-space:nowrap; max-width:250px; overflow:hidden; text-overflow:ellipsis;}
+.var-row{cursor:default; transition: opacity 0.3s, filter 0.3s;}
 .var-row:hover td{background:var(--surf2)}
 .var-row[data-impact=HIGH]     td:first-child{border-left:3px solid #f44}
 .var-row[data-impact=MODERATE] td:first-child{border-left:3px solid #f90}
 .var-row[data-impact=LOW]      td:first-child{border-left:3px solid #48f}
+
+/* New Tiers */
+.var-row.tier-1 { opacity: 1; }
+.var-row.tier-2 { opacity: 0.55; }
+.var-row.tier-3 { opacity: 0.20; filter: grayscale(100%); }
+.var-row.saved { background-color: rgba(46, 204, 113, 0.15) !important; opacity: 1 !important; filter: none !important; border-left: 3px solid #2ecc71 !important;}
+.var-row.discarded { opacity: 0.10 !important; filter: grayscale(100%) !important; text-decoration: line-through; border-left: 3px solid #e74c3c !important;}
+
 .sc{max-width:200px;white-space:normal;word-break:break-word;font-size:11px}
 .gt{font-family:var(--mono);font-size:11px;text-align:center;color:var(--muted)}
 .badge{display:inline-block;padding:.1rem .4rem;border-radius:3px;font-size:10px;
@@ -484,6 +524,8 @@ JS = """
 const _varData  = {};   // jsid → parsed data object
 const _posIndex = {};   // jsid → {chrom: [[pos, rowIdx], ...]} sorted by pos
 const _viewMode = {};   // jsid → 'window' | 'all'
+const _currentIndices = {}; // jsid -> array of currently rendered rows
+const _sortState = {};
 
 // ── lightbox ──────────────────────────────────────────────────────────────
 function openLightbox(fig){
@@ -505,7 +547,7 @@ function toggleSection(id){
 }
 function expandAll(){
   document.querySelectorAll('.section-body').forEach(b=>b.classList.add('open'));
-  document.querySelectorAll('.section-arrow').forEach(a=>a.classList.add('open'));  // fixed: was .open()
+  document.querySelectorAll('.section-arrow').forEach(a=>a.classList.add('open'));
 }
 function collapseAll(){
   document.querySelectorAll('.section-body').forEach(b=>b.classList.remove('open'));
@@ -537,19 +579,57 @@ function buildPosIndex(data){
   return idx;
 }
 
-// Binary search: first index where arr[i][0] >= target
 function bisectLeft(arr, target){
   let lo=0, hi=arr.length;
   while(lo<hi){ const mid=(lo+hi)>>1; if(arr[mid][0]<target) lo=mid+1; else hi=mid; }
   return lo;
 }
 
-// Dominant chrom (most rows)
 function domChrom(data){
   const F={};  data.fields.forEach((f,i)=>F[f]=i);
   const cc={};
   data.rows.forEach(r=>{ const c=r[F.chrom]||''; cc[c]=(cc[c]||0)+1; });
   return Object.entries(cc).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
+}
+
+// ── CART & EXPORT ─────────────────────────────────────────────────────────
+function tagVariant(jsid, rowIdx, state) {
+    const rowId = 'vrow-' + jsid + '-' + rowIdx;
+    const row = document.getElementById(rowId);
+    let cart = JSON.parse(localStorage.getItem('cart_' + jsid) || '{}');
+    if (cart[rowId] === state) {
+        delete cart[rowId];
+        if(row) row.classList.remove('saved', 'discarded');
+    } else {
+        cart[rowId] = state;
+        if(row) {
+            row.classList.remove('saved', 'discarded');
+            row.classList.add(state);
+        }
+    }
+    localStorage.setItem('cart_' + jsid, JSON.stringify(cart));
+}
+
+function exportCartCSV(jsid) {
+    const data = _varData[jsid];
+    if (!data) return alert("Please load variants first.");
+    const cart = JSON.parse(localStorage.getItem('cart_' + jsid) || '{}');
+    let csv = "Triage_State," + data.fields.join(",") + "\\n";
+    let count = 0;
+    data.rows.forEach((r, i) => {
+        const state = cart['vrow-' + jsid + '-' + i];
+        if (state && state !== 'discarded' && state !== 'unreviewed') {
+            const cleanRow = r.map(v => `"${(v||'').toString().replace(/"/g, '""')}"`).join(",");
+            csv += `${state},${cleanRow}\\n`;
+            count++;
+        }
+    });
+    if(count === 0) return alert("No candidates saved in the cart yet!");
+    const blob = new Blob([csv], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `triage_candidates_${jsid}.csv`;
+    a.click(); URL.revokeObjectURL(url);
 }
 
 // ── row building ──────────────────────────────────────────────────────────
@@ -558,37 +638,171 @@ function makeRow(data, rowIdx, gi, F, jsid){
   const imp=r[F.impact]||'';
   const lof=r[F.lof]?'<span class="lof-tag">LOF</span>':'';
   const nmd=r[F.nmd]?'<span class="nmd-tag">NMD</span>':'';
-  const gtC=gi.map(ci=>`<td class="gt">${esc(r[ci]||'./.')}</td>`).join('');
+  const gtC=gi.map(ci=>`<td class="gt" title="Genotype: ${esc(r[ci])}">${esc(r[ci]||'./.')}</td>`).join('');
   const tr=document.createElement('tr');
-  tr.className='var-row';
-  tr.id='vrow-'+jsid+'-'+rowIdx;
+  const rowId = 'vrow-'+jsid+'-'+rowIdx;
+  
+  const cart = JSON.parse(localStorage.getItem('cart_'+jsid) || '{}');
+  const initialClass = cart[rowId] ? ' ' + cart[rowId] : '';
+  
+  tr.className='var-row' + initialClass;
+  tr.id=rowId;
   tr.dataset.impact=imp;
   tr.dataset.pos=r[F.pos]||'';
   tr.dataset.chrom=r[F.chrom]||'';
   tr.dataset.text=[r[F.vep_symbol],r[F.vep_consequence],r[F.vep_hgvsc],
                    r[F.ann_gene],r[F.ann_annotation],r[F.chrom]].join(' ').toLowerCase();
+
+  // Mathematical Segregation & Depth check logic embedded in the row
+  let mutHits = 0, sibHits = 0, mutTotal = 0, sibTotal = 0;
+  data.fields.forEach((colName, idx) => {
+      if (colName.startsWith('s:')) {
+          const isMut = colName.toLowerCase().includes('mut');
+          const isSib = colName.toLowerCase().includes('sib') || colName.toLowerCase().includes('wt');
+          if (isMut) { mutTotal++; if (r[idx] && r[idx].includes('1/1')) mutHits++; }
+          if (isSib) { sibTotal++; if (r[idx] && r[idx].includes('1/1')) sibHits++; }
+      }
+  });
+  
+  let segScore = 0;
+  let segBadge = '<span class="badge" style="background:#6b7494;color:#fff" title="No valid samples for seg math">N/A</span>';
+  if (mutTotal > 0) {
+      segScore = (mutHits / mutTotal) - (sibTotal > 0 ? (sibHits / sibTotal) : 0);
+      r._segScore = segScore;
+      if (segScore >= 0.8) segBadge = `<span class="badge" style="background:#2ecc71;color:#fff">${segScore.toFixed(2)}</span>`;
+      else if (segScore > 0) segBadge = `<span class="badge" style="background:#f39c12;color:#fff">${segScore.toFixed(2)}</span>`;
+      else segBadge = `<span class="badge" style="background:#e74c3c;color:#fff">${segScore.toFixed(2)}</span>`;
+  }
+
+  const triageBtns = `<td style="text-align:center; border-right: 1px solid var(--brd);"><span style="cursor:pointer; margin-right:5px; font-size:14px;" title="Save" onclick="tagVariant('${jsid}', ${rowIdx}, 'saved')">🟢</span><span style="cursor:pointer; font-size:14px;" title="Discard" onclick="tagVariant('${jsid}', ${rowIdx}, 'discarded')">❌</span></td>`;
+
   tr.innerHTML=
-    `<td>${badge(imp)}${lof}${nmd}</td>`+
-    `<td>${esc(r[F.chrom])}</td><td>${esc(r[F.pos])}</td>`+
-    `<td>${esc(r[F.ref])}</td><td>${esc(r[F.alt])}</td>`+
-    `<td>${esc(r[F.qual])}</td><td>${esc(r[F.filter])}</td>`+
-    `<td>${esc(r[F.vep_symbol])}</td><td class="sc">${esc(r[F.vep_consequence])}</td>`+
-    `<td class="sc">${esc(r[F.vep_hgvsc])}</td><td class="sc">${esc(r[F.vep_hgvsp])}</td>`+
-    `<td>${esc(r[F.vep_aa])}</td><td class="tc">${r[F.vep_n]||'—'}</td>`+
-    `<td>${esc(r[F.ann_gene])}</td><td class="sc">${esc(r[F.ann_annotation])}</td>`+
-    `<td class="tc">${r[F.ann_n]||'—'}</td>${gtC}`;
+    triageBtns +
+    `<td style="text-align:center;" title="Fidelity Math: Perfect mutants minus noise siblings">${segBadge}</td>`+
+    `<td title="${esc(imp)}">${badge(imp)}${lof}${nmd}</td>`+
+    `<td title="Chromosome">${esc(r[F.chrom])}</td><td title="Position">${esc(r[F.pos])}</td>`+
+    `<td title="Reference Base">${esc(r[F.ref])}</td><td title="Alternate Base">${esc(r[F.alt])}</td>`+
+    `<td title="Phred Qual">${esc(r[F.qual])}</td><td title="Filter tag">${esc(r[F.filter])}</td>`+
+    `<td title="VEP Symbol">${esc(r[F.vep_symbol])}</td><td class="sc" title="VEP Consequence">${esc(r[F.vep_consequence])}</td>`+
+    `<td class="sc" title="HGVSc Code">${esc(r[F.vep_hgvsc])}</td><td class="sc" title="HGVSp Code">${esc(r[F.vep_hgvsp])}</td>`+
+    `<td title="Amino Acid Details">${esc(r[F.vep_aa])}</td><td class="tc" title="Transcripts affected">${r[F.vep_n]||'—'}</td>`+
+    `<td title="ANN Gene">${esc(r[F.ann_gene])}</td><td class="sc" title="ANN Annotation">${esc(r[F.ann_annotation])}</td>`+
+    `<td class="tc" title="Transcripts affected">${r[F.ann_n]||'—'}</td>${gtC}`;
   tr.addEventListener('mouseover',()=>updateGffMarker(jsid,r[F.chrom],parseInt(r[F.pos])||0));
   return tr;
 }
 
-function buildHeader(data, headId, sampleNames){
-  const gtH=sampleNames.map(s=>`<th>${esc(s)}</th>`).join('');
+function buildHeader(data, headId, sampleNames, jsid){
+  const F={}; data.fields.forEach((f,i)=>F[f]=i);
+  const gtH = sampleNames.map(s => `<th style="cursor:pointer;" title="Genotype: ${esc(s)}. Format: Call (Depthx). Click to sort depth." onclick="sortTable('${jsid}', ${F[`s:${s}`]}, 'gt')">${esc(s)} ↕</th>`).join('');
+
   document.getElementById(headId).innerHTML=
-    `<tr><th>Impact</th><th>Chrom</th><th>Pos</th><th>Ref</th><th>Alt</th>`+
-    `<th>Qual</th><th>Filter</th>`+
-    `<th>VEP symbol</th><th>Consequence</th><th>HGVSc</th><th>HGVSp</th><th>AA</th><th>VEP tx</th>`+
-    `<th>ANN gene</th><th>Annotation</th><th>ANN tx</th>${gtH}</tr>`;
+    `<tr><th style="width:70px;text-align:center;" title="Curate variants">Triage</th>`+
+    `<th style="cursor:pointer;" title="Continuous 0-1 score comparing Mutants vs Siblings" onclick="sortTable('${jsid}', 'seg', 'num')">Seg ↕</th>`+
+    `<th style="cursor:pointer;" title="Variant Impact" onclick="sortTable('${jsid}', ${F.impact}, 'impact')">Impact ↕</th>`+
+    `<th style="cursor:pointer;" title="Chromosome" onclick="sortTable('${jsid}', ${F.chrom}, 'str')">Chrom ↕</th>`+
+    `<th style="cursor:pointer;" title="Position" onclick="sortTable('${jsid}', ${F.pos}, 'num')">Pos ↕</th>`+
+    `<th title="Reference">Ref</th><th title="Alternate">Alt</th>`+
+    `<th style="cursor:pointer;" title="Quality Score" onclick="sortTable('${jsid}', ${F.qual}, 'num')">Qual ↕</th>`+
+    `<th title="Filter Status">Filter</th>`+
+    `<th style="cursor:pointer;" title="VEP Symbol" onclick="sortTable('${jsid}', ${F.vep_symbol}, 'str')">VEP Sym ↕</th>`+
+    `<th title="VEP Consequence">Cons</th><th title="HGVSc">HGVSc</th><th title="HGVSp">HGVSp</th>`+
+    `<th title="Amino Acid details">AA</th><th title="VEP Overlaps">VEP tx</th>`+
+    `<th title="ANN Gene">ANN Gene</th><th title="ANN Annotation">Annotation</th><th title="ANN Overlaps">ANN tx</th>${gtH}</tr>`;
 }
+
+// ── Core Array Sorting Engine ──────────────────────────────────────────────
+function sortTable(jsid, colIdx, type) {
+    const data = _varData[jsid];
+    const activeIndices = _currentIndices[jsid];
+    if (!data || !activeIndices) return;
+
+    _sortState[jsid] = _sortState[jsid] || { col: null, dir: 1 };
+    if (_sortState[jsid].col === colIdx) _sortState[jsid].dir *= -1;
+    else { _sortState[jsid].col = colIdx; _sortState[jsid].dir = 1; }
+    const dir = _sortState[jsid].dir;
+
+    setStatus(jsid, 'Sorting display window...');
+    const impactVal = {"HIGH":4, "MODERATE":3, "LOW":2, "MODIFIER":1, "":0};
+
+    activeIndices.sort((idxA, idxB) => {
+        const a = data.rows[idxA]; const b = data.rows[idxB];
+        let valA, valB;
+        if (colIdx === 'seg') { valA = a._segScore || -1; valB = b._segScore || -1; } 
+        else { valA = a[colIdx]; valB = b[colIdx]; }
+
+        if (type === 'gt') { 
+            const depthA = parseInt((String(valA||'').match(/\\((\\d+)x\\)/) || [0,0])[1]);
+            const depthB = parseInt((String(valB||'').match(/\\((\\d+)x\\)/) || [0,0])[1]);
+            return (depthB - depthA) * dir;
+        } 
+        else if (type === 'num') { return ((parseFloat(valB)||0) - (parseFloat(valA)||0)) * dir; } 
+        else if (type === 'impact') { return ((impactVal[valB||""]||0) - (impactVal[valA||""]||0)) * dir; } 
+        else {
+            const strA = String(valA||"").toLowerCase(); const strB = String(valB||"").toLowerCase();
+            return strA < strB ? -1 * dir : (strA > strB ? 1 * dir : 0);
+        }
+    });
+
+    const F={}; data.fields.forEach((f,i)=>F[f]=i);
+    const gi = window._snames[jsid].map(s=>F[`s:${s}`]);
+    const tbody = document.getElementById('tb-'+jsid);
+    tbody.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    activeIndices.forEach(ri => frag.appendChild(makeRow(data, ri, gi, F, jsid)));
+    tbody.appendChild(frag);
+    runStratification(jsid);
+    setStatus(jsid, 'Sorted.');
+}
+
+// ── Stratification Visualizer ──────────────────────────────────────────────
+function runStratification(jsid) {
+    const mode = document.getElementById('preset-mode-' + jsid).value;
+    const minDp = parseInt(document.getElementById('min-dp-' + jsid).value, 10) || 0;
+    const data = _varData[jsid]; if(!data) return;
+    const F = {}; data.fields.forEach((f,i)=>F[f]=i);
+
+    const mutCols = [];
+    data.fields.forEach((colName, idx) => { if (colName.toLowerCase().includes('mut')) mutCols.push(idx); });
+
+    document.querySelectorAll(`#tw-${jsid} .var-row`).forEach(tr => {
+        if (tr.classList.contains('saved') || tr.classList.contains('discarded')) return;
+        const rIdx = parseInt(tr.id.split('-').pop(), 10);
+        const r = data.rows[rIdx]; if(!r) return;
+        
+        let score = 0;
+        const imp = r[F.impact] || '';
+        if (imp === 'HIGH') score += 2;
+        if (imp === 'MODERATE') score += 1;
+        if (r._segScore >= 0.8) score += 2;
+
+        let passDepth = true;
+        if (mutCols.length > 0 && minDp > 0) {
+            mutCols.forEach(idx => {
+                const match = String(r[idx]||'').match(/\\((\\d+)x\\)/);
+                if (match && parseInt(match[1], 10) < minDp) passDepth = false;
+            });
+        }
+
+        tr.classList.remove('tier-1', 'tier-2', 'tier-3');
+        if (mode === 'strict') {
+            if (score >= 3 && passDepth) tr.classList.add('tier-1');
+            else tr.classList.add('tier-3'); 
+        } 
+        else if (mode === 'segregation') {
+            if (r._segScore >= 0.8 && passDepth) tr.classList.add('tier-1');
+            else if (r._segScore > 0) tr.classList.add('tier-2');
+            else tr.classList.add('tier-3');
+        } 
+        else {
+            if (!passDepth) tr.classList.add('tier-3');
+            else if (score >= 3) tr.classList.add('tier-1');
+            else if (score > 0) tr.classList.add('tier-2');
+            else tr.classList.add('tier-3');
+        }
+    });
+}
+
 
 // ── windowed render (±100 rows around a position, by sorted index) ─────────
 function renderWindow(jsid, chrom, centerPos, sampleNames){
@@ -609,6 +823,8 @@ function renderWindow(jsid, chrom, centerPos, sampleNames){
   rowIndices.forEach(ri=>frag.appendChild(makeRow(data,ri,gi,F,jsid)));
   tbody.appendChild(frag);
   document.getElementById('tw-'+jsid).style.display='';
+  _currentIndices[jsid] = rowIndices;
+  runStratification(jsid);
 }
 
 // ── full chunked render (SNAP / show all) ──────────────────────────────────
@@ -618,7 +834,6 @@ function renderAll(jsid, filterImpactVal, sampleNames){
   const gi=sampleNames.map(s=>F[`s:${s}`]);
   _viewMode[jsid]='all';
 
-  // filter row indices
   let indices=[];
   data.rows.forEach((r,i)=>{
     if(!filterImpactVal||filterImpactVal==='ALL'||r[F.impact]===filterImpactVal) indices.push(i);
@@ -631,7 +846,6 @@ function renderAll(jsid, filterImpactVal, sampleNames){
 
   const total=indices.length;
   let i=0;
-  // dynamic chunk: start small, ramp up so early rows appear fast
   function nextChunk(){
     const chunkSize=Math.min(200+Math.floor(i/500)*100, 2000);
     const frag=document.createDocumentFragment();
@@ -645,7 +859,7 @@ function renderAll(jsid, filterImpactVal, sampleNames){
     if(ppct) ppct.textContent=pct+'%';
     setStatus(jsid,`Rendering… ${i.toLocaleString()} / ${total.toLocaleString()}`);
     if(i<total){ setTimeout(nextChunk,0); }
-    else{ document.getElementById('vstatus-'+jsid).style.display='none'; applyFilters('tw-'+jsid,jsid); }
+    else{ document.getElementById('vstatus-'+jsid).style.display='none'; _currentIndices[jsid] = indices; applyFilters('tw-'+jsid,jsid); runStratification(jsid); }
   }
   nextChunk();
 }
@@ -689,11 +903,13 @@ function applyFilters(tblId, jsid){
   });
 }
 
-// ── snap buttons (show all rows for an impact level) ─────────────────────
-function snapToImpact(impact, jsid, sampleNames){
-  document.getElementById('vstatus-'+jsid).style.display='';
-  setStatus(jsid,'Loading all '+impact+' variants…');
-  setTimeout(()=>renderAll(jsid, impact, sampleNames), 0);
+// ── IGV Integration ───────────────────────────────────────────────────────
+function renderIGV(jsid, configStr) {
+    if(!configStr) return;
+    const igvDiv = document.getElementById('igv-container-' + jsid);
+    if(!igvDiv || typeof igv === 'undefined') return;
+    const options = JSON.parse(configStr);
+    igv.createBrowser(igvDiv, options);
 }
 
 // ── GFF track ─────────────────────────────────────────────────────────────
@@ -801,6 +1017,8 @@ function navigateToCoordinate(jsid, chrom, startPos, endPos, sampleNames){
   const sn=sampleNames||window._snames[jsid]||[];
   renderWindow(jsid,chrom,startPos,sn);
   updateGffMarker(jsid,chrom,startPos);
+  // sync IGV if present
+  if (window.igv && window.igv.browser) { window.igv.browser.search(`${chrom}:${Math.max(1, startPos-50)}-${startPos+50}`); }
   // scroll first visible row into view
   setTimeout(()=>{
     const first=document.querySelector('#tw-'+jsid+' .var-row:not([style*="none"])');
@@ -846,17 +1064,9 @@ def _gallery_html(images, title, section_id):
             f'<span class="section-arrow" id="ar-{section_id}">▶</span></div>'
             f'<div class="section-body" id="sb-{section_id}">{body}</div></div>')
 
-
-
-
 # ── GFF extraction ────────────────────────────────────────────────────────────
 
 def extract_gff_features(gff_path: Path, chrom: str, start: int, end: int) -> list:
-    """
-    Extract GFF features for chrom:start-end using tabix.
-    Returns list of dicts with keys: chrom, start, end, strand, type, name.
-    Gracefully returns [] if tabix unavailable or GFF not provided.
-    """
     if not gff_path or not gff_path.exists():
         return []
     import subprocess
@@ -866,7 +1076,6 @@ def extract_gff_features(gff_path: Path, chrom: str, start: int, end: int) -> li
             capture_output=True, text=True, timeout=30
         )
         if result.returncode != 0:
-            # try without chr prefix / with chr prefix
             alt = chrom.lstrip("chr") if chrom.startswith("chr") else f"chr{chrom}"
             result = subprocess.run(
                 ["tabix", str(gff_path), f"{alt}:{start}-{end}"],
@@ -879,7 +1088,6 @@ def extract_gff_features(gff_path: Path, chrom: str, start: int, end: int) -> li
             if len(parts) < 9: continue
             fchrom, _src, ftype, fstart, fend, _score, strand = parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]
             attrs = parts[8]
-            # extract Name or gene_id from attributes
             name = ""
             for pat in [r'Name=([^;]+)', r'gene_name=([^;]+)', r'gene_id=([^;]+)', r'ID=([^;]+)']:
                 m = re.search(pat, attrs)
@@ -894,12 +1102,7 @@ def extract_gff_features(gff_path: Path, chrom: str, start: int, end: int) -> li
         print(f"  [WARN] tabix GFF extraction failed: {e}", file=sys.stderr)
         return []
 
-
 def get_vcf_coord_range(json_path: Path) -> dict:
-    """
-    Read a written JSON sidecar and return {chrom: (min_pos, max_pos)} per chromosome.
-    Used to scope GFF extraction to the actual variant range.
-    """
     if not json_path.exists(): return {}
     try:
         with open(json_path, encoding="utf-8") as f:
@@ -922,10 +1125,57 @@ def get_vcf_coord_range(json_path: Path) -> dict:
         print(f"  [WARN] coord range read failed: {e}", file=sys.stderr)
         return {}
 
+# ── IGV configuration ─────────────────────────────────────────────────────────
+
+def get_bam_locus(bam_path: Path) -> str:
+    import subprocess
+    try:
+        idx_res = subprocess.run(["samtools", "idxstats", str(bam_path)], capture_output=True, text=True)
+        best_chrom, max_reads = "", 0
+        for line in idx_res.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3 and int(parts[2]) > max_reads:
+                max_reads, best_chrom = int(parts[2]), parts[0]
+        if not best_chrom: return "all"
+        view_res = subprocess.run(["samtools", "view", str(bam_path), best_chrom], capture_output=True, text=True)
+        first_pos = int(view_res.stdout.splitlines()[0].split("\t")[3])
+        return f"{best_chrom}:{max(1, first_pos - 2000)}-{first_pos + 2000}"
+    except Exception: return "all"
+
+def build_igv_config(sample_dir: Path, fasta_name: str = None) -> str:
+    tracks = []
+    prefix = sample_dir.name
+    
+    go_dir = sample_dir / "genome_overview"
+    if go_dir.is_dir():
+        for f in sorted(go_dir.iterdir()):
+            if f.suffix in [".tdf", ".bedgraph", ".bw"]:
+                fmt = "tdf" if f.suffix == ".tdf" else "bedgraph"
+                tracks.append({"name": f"Overview: {f.name}", "url": f"{prefix}/genome_overview/{f.name}", "type": "wig", "format": fmt, "order": 10})
+
+    nt_dir = sample_dir / "nucleotide_view"
+    if nt_dir.is_dir():
+        for sub in ["mut", "wt", "sib"]:
+            sub_dir = nt_dir / sub
+            if sub_dir.is_dir():
+                for f in sorted(sub_dir.iterdir()):
+                    if f.suffix == ".bam":
+                        order = 50 if sub == "mut" else 60
+                        tracks.append({"name": f"Reads ({sub.upper()}): {f.name}", "url": f"{prefix}/nucleotide_view/{sub}/{f.name}", "indexURL": f"{prefix}/nucleotide_view/{sub}/{f.name}.bai", "format": "bam", "type": "alignment", "order": order})
+
+    if not tracks: return ""
+    locus = "all"
+    first_bam = next((sample_dir.parent / t["url"] for t in tracks if t["format"] == "bam"), None)
+    if first_bam and first_bam.exists(): locus = get_bam_locus(first_bam)
+    
+    config = {"locus": locus, "tracks": tracks}
+    if fasta_name: config["reference"] = {"id": "danRer7_local", "name": "Zebrafish (danRer7)", "fastaURL": fasta_name, "indexURL": f"{fasta_name}.fai"}
+    else: config["reference"] = {"id": "danRer7_ucsc", "name": "Zebrafish (danRer7)", "fastaURL": "https://hgdownload.soe.ucsc.edu/goldenPath/danRer7/bigZips/danRer7.fa.gz", "indexURL": "https://hgdownload.soe.ucsc.edu/goldenPath/danRer7/bigZips/danRer7.fa.gz.fai"}
+    return json.dumps(config)
 
 # ── VCF section HTML (inline on sample page, non-collapsible) ─────────────────
 
-def _vcf_section_html(vcf_path, jsid, max_vcf_rows, has_gff: bool):
+def _vcf_section_html(vcf_path, jsid, max_vcf_rows, fasta_name, has_gff: bool):
     """Return HTML for one VCF block (non-collapsible, inline variant table)."""
     _, col_headers, sample_names, csq_fmt, ann_fmt = read_vcf_header(vcf_path)
     no_vep = '' if csq_fmt else '<p class="muted" style="margin:.2rem 0;font-size:11px">No VEP/CSQ annotations in this VCF.</p>'
@@ -938,18 +1188,16 @@ def _vcf_section_html(vcf_path, jsid, max_vcf_rows, has_gff: bool):
                     f'Showing first {max_vcf_rows} variants.</p>') if max_vcf_rows else ''
     tbl_wrap_id  = f"tw-{jsid}"
 
-    snap_bar = f"""
-  <div id="snapbar-{jsid}" style="display:none;margin-bottom:.5rem">
-    <div class="filter-bar" style="gap:.35rem">
-      <span>Show all:</span>
-      <button class="f-btn" onclick="renderAll('{jsid}','HIGH',SNAMES_{jsid})">HIGH</button>
-      <button class="f-btn" onclick="renderAll('{jsid}','MODERATE',SNAMES_{jsid})">MODERATE</button>
-      <button class="f-btn" onclick="renderAll('{jsid}','LOW',SNAMES_{jsid})">LOW</button>
-      <button class="f-btn" onclick="renderAll('{jsid}','ALL',SNAMES_{jsid})">ALL</button>
-      <span style="margin-left:.5rem;color:var(--muted);font-size:11px">← renders full dataset progressively. USE WITH CAUTION, MAY CAUSE LAG.</span>
-    </div>
-  </div>
-  <script>const SNAMES_{jsid}={gt_header_js};</script>"""
+    sample_dir = vcf_path.parent
+    igv_config_json = build_igv_config(sample_dir, fasta_name)
+    igv_html = f"""
+    <div id="igv-container-{jsid}" style="margin: 1rem 0; border: 1px solid var(--brd); border-radius: var(--r);"></div>
+    <script>
+      document.addEventListener("DOMContentLoaded", function() {{
+          renderIGV('{jsid}', '{igv_config_json}');
+      }});
+    </script>
+    """ if igv_config_json else ""
 
     gff_track_html = f"""
     <div id="gff-wrap-{jsid}" style="display:none">
@@ -966,46 +1214,47 @@ def _vcf_section_html(vcf_path, jsid, max_vcf_rows, has_gff: bool):
 <div class="vcf-block">
   <h4 class="vcf-name">{_escape(vcf_path.name)}</h4>
   {no_vep}{no_ann}
+  {igv_html}
   {gff_track_html}
   {trunc_note}
-  {snap_bar}
+  
+  <div style="margin-bottom:.75rem; display:flex; gap:.5rem;">
+    <button class="load-btn" onclick="exportCartCSV('{jsid}')" style="background: rgba(46, 204, 113, 0.15); border-color: #2ecc71; color: #2ecc71;">
+      Export Curated CSV
+    </button>
+  </div>
+
   <div class="filter-bar" id="fbar-{jsid}">
-    <span>Filter:</span>
-    <button class="f-btn active" onclick="filterImpact(this,'ALL','{tbl_wrap_id}','{jsid}')">All</button>
-    <button class="f-btn" onclick="filterImpact(this,'HIGH','{tbl_wrap_id}','{jsid}')">HIGH</button>
-    <button class="f-btn" onclick="filterImpact(this,'MODERATE','{tbl_wrap_id}','{jsid}')">MODERATE</button>
-    <button class="f-btn" onclick="filterImpact(this,'LOW','{tbl_wrap_id}','{jsid}')">LOW</button>
-    <button class="f-btn" onclick="filterImpact(this,'MODIFIER','{tbl_wrap_id}','{jsid}')">MODIFIER</button>
-    <input class="search-box" id="sterm-{jsid}" type="text" placeholder="Search gene / consequence…"
-           oninput="applyFilters('{tbl_wrap_id}','{jsid}')">
-    <input class="search-box" id="spos-{jsid}" type="text" placeholder="Pos range e.g. chr13:33550336-33550337"
-           oninput="applyFilters('{tbl_wrap_id}','{jsid}')" style="width:280px">
+    <div style="display:flex; align-items:center; gap: 10px; flex-wrap:wrap;">
+        <strong style="color:var(--txt);">Presets:</strong>
+        <select id="preset-mode-{jsid}" class="search-box" style="width: auto;" onchange="runStratification('{jsid}')">
+            <option value="strict">Strict (High/Mod + Perfect Segregation)</option>
+            <option value="relaxed" selected>Relaxed (Opacity Scaling)</option>
+            <option value="segregation">Segregation Fidelity Only</option>
+        </select>
+        <label style="color:var(--txt); margin-left:10px;">Min Depth:
+            <input type="number" id="min-dp-{jsid}" value="0" class="search-box" style="width: 60px; margin-left: 5px;" onchange="runStratification('{jsid}')">
+        </label>
+    </div>
+    <div style="display:flex; align-items:center; gap: 10px; margin-top:5px; flex-wrap:wrap;">
+        <span style="color:var(--txt); font-weight:600;">Filter:</span>
+        <button class="f-btn active" onclick="filterImpact(this,'ALL','{tbl_wrap_id}','{jsid}')">All</button>
+        <button class="f-btn" onclick="filterImpact(this,'HIGH','{tbl_wrap_id}','{jsid}')">HIGH</button>
+        <button class="f-btn" onclick="filterImpact(this,'MODERATE','{tbl_wrap_id}','{jsid}')">MODERATE</button>
+        <button class="f-btn" onclick="filterImpact(this,'LOW','{tbl_wrap_id}','{jsid}')">LOW</button>
+        <button class="f-btn" onclick="filterImpact(this,'MODIFIER','{tbl_wrap_id}','{jsid}')">MODIFIER</button>
+        <input class="search-box" id="sterm-{jsid}" type="text" placeholder="Search gene / consequence…" oninput="applyFilters('{tbl_wrap_id}','{jsid}'); runStratification('{jsid}');" style="width:200px">
+        <input class="search-box" id="spos-{jsid}" type="text" placeholder="Pos range e.g. chr13:335-337" oninput="applyFilters('{tbl_wrap_id}','{jsid}')" style="width:200px">
+    </div>
   </div>
   <p>
     The coordinate and search gene functionality work within the scope of the selected interactive region <b>only</b>.
   </p>
+  
   <div id="vload-{jsid}" style="margin-bottom:.75rem">
     <button class="load-btn" onclick="loadVcf_{jsid}()">▶ Load variants</button>
     <p class="muted" style="margin-top:.4rem;font-size:11px">
     </p>
-  </div>
-  <div id="vstatus-{jsid}" style="display:none;padding:.5rem 0">
-    <span class="muted" id="vmsg-{jsid}">Loading…</span>
-    <div class="progress-container">
-      <div class="progress-bar" id="pbar-{jsid}"></div>
-    </div>
-    <div class="progress-meta">
-      <span id="ppct-{jsid}">0%</span>
-    </div>
-  </div>
-  <div id="{tbl_wrap_id}" style="display:none">
-    <div class="tbl-scroll">
-    <table class="var-table">
-      <thead id="th-{jsid}"></thead>
-      <tbody id="tb-{jsid}"></tbody>
-    </table>
-    </div>
-  </div>
   </div>
   <div id="vstatus-{jsid}" style="display:none;padding:.5rem 0">
     <span class="muted" id="vmsg-{jsid}">Loading…</span>
@@ -1023,7 +1272,6 @@ def _vcf_section_html(vcf_path, jsid, max_vcf_rows, has_gff: bool):
     const SNAMES  = {gt_header_js};
     const HAS_GFF = {'true' if has_gff else 'false'};
     const JSID    = '{jsid}';
-    // register sample names for navigateToCoordinate
     window._snames = window._snames || {{}};
     window._snames[JSID] = SNAMES;
 
@@ -1033,7 +1281,6 @@ def _vcf_section_html(vcf_path, jsid, max_vcf_rows, has_gff: bool):
       document.getElementById('vstatus-{jsid}').style.display = '';
       setStatus(JSID, 'Downloading {jsid}.json…');
 
-      // fetch raw text for progress display, parse in Web Worker
       const p1 = fetch('{jsid}.json')
         .then(r=>{{ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); }})
         .then(text=>{{
@@ -1049,14 +1296,11 @@ def _vcf_section_html(vcf_path, jsid, max_vcf_rows, has_gff: bool):
         .then(([data, features])=>{{
           document.getElementById('vload-{jsid}').style.display = 'none';
 
-          // store globally for SNAP / re-renders
           _varData[JSID]  = data;
           _posIndex[JSID] = buildPosIndex(data);
 
-          // build table header once
-          buildHeader(data, 'th-{jsid}', SNAMES);
+          buildHeader(data, 'th-{jsid}', SNAMES, JSID);
 
-          // initial windowed render: ±100 rows around midpoint of dominant chrom
           const dc = domChrom(data);
           const idx = _posIndex[JSID][dc] || [];
           const midEntry = idx[Math.floor(idx.length/2)];
@@ -1064,15 +1308,9 @@ def _vcf_section_html(vcf_path, jsid, max_vcf_rows, has_gff: bool):
           if(midPos) {{
             renderWindow(JSID, dc, midPos, SNAMES);
           }} else {{
-            // no position data — fall back to rendering first 200 rows
             renderAll(JSID, 'ALL', SNAMES);
           }}
 
-          // show SNAP buttons
-          const snapBar = document.getElementById('snapbar-{jsid}');
-          if(snapBar) snapBar.style.display = '';
-
-          // GFF track
           if(HAS_GFF && features.length){{
             document.getElementById('gff-wrap-{jsid}').style.display = '';
             setTimeout(()=>renderGffTrack(features, data, JSID), 50);
@@ -1089,8 +1327,7 @@ def _vcf_section_html(vcf_path, jsid, max_vcf_rows, has_gff: bool):
   </script>
 </div>"""
 
-
-def render_sample_page(sample_dir: Path, max_vcf_rows: int,
+def render_sample_page(sample_dir: Path, max_vcf_rows: int, fasta_name: str,
                        index_url="index.html", generated_at="", has_gff=False):
     name = sample_dir.name
     fm, md_html = parse_md(sample_dir / "sample.md")
@@ -1113,7 +1350,7 @@ def render_sample_page(sample_dir: Path, max_vcf_rows: int,
         for vcf_path in vcfs:
             jsid = re.sub(r"[^a-zA-Z0-9_]", "_",
                           f"{sid}__{vcf_path.stem.replace('.vcf','')}")
-            vcf_blocks_html += _vcf_section_html(vcf_path, jsid, max_vcf_rows, has_gff)
+            vcf_blocks_html += _vcf_section_html(vcf_path, jsid, max_vcf_rows, fasta_name, has_gff)
             _, col_headers, snames, csq_fmt, ann_fmt = read_vcf_header(vcf_path)
             if col_headers:
                 vcf_metas.append((vcf_path, jsid, col_headers, snames, csq_fmt, ann_fmt))
@@ -1125,6 +1362,7 @@ def render_sample_page(sample_dir: Path, max_vcf_rows: int,
 <title>{_escape(name)} — Genomics Report</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/igv@2.15.5/dist/igv.min.js"></script>
 <style>{{CSS}}</style>
 </head><body>
 <nav id="sidebar">
@@ -1164,7 +1402,6 @@ def render_sample_page(sample_dir: Path, max_vcf_rows: int,
 </body></html>"""
 
     return html, vcf_metas
-
 
 # ── Index page ────────────────────────────────────────────────────────────────
 
@@ -1216,7 +1453,6 @@ def render_index(samples, data_dir, generated_at=""):
   <th class="tc">Overview</th><th class="tc">Nucleotide</th><th class="tc">VCFs</th></tr></thead>
   <tbody>{rows_html}</tbody></table>{ts}</div>"""
 
-
 # ── Assembly ──────────────────────────────────────────────────────────────────
 
 def _sidebar_items(samples, current_sid=None):
@@ -1233,18 +1469,17 @@ def _wrap(raw, samples, current_sid):
                .replace("{SIDEBAR_ITEMS}", _sidebar_items(samples, current_sid)))
 
 def _render_worker(args):
-    sample_dir, max_vcf_rows, generated_at, has_gff = args
-    html, vcf_metas = render_sample_page(sample_dir, max_vcf_rows,
+    sample_dir, max_vcf_rows, fasta_name, generated_at, has_gff = args
+    html, vcf_metas = render_sample_page(sample_dir, max_vcf_rows, fasta_name,
                                           generated_at=generated_at, has_gff=has_gff)
     return sample_dir, html, vcf_metas
 
-def build_report(samples, data_dir, out_dir, max_vcf_rows, gff_path=None, ncpu=1):
+def build_report(samples, data_dir, out_dir, max_vcf_rows, gff_path=None, fasta_name=None, skip_json=False, ncpu=1):
     out_dir.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     has_gff = gff_path is not None and gff_path.exists()
-    tasks = [(s, max_vcf_rows, generated_at, has_gff) for s in samples]
+    tasks = [(s, max_vcf_rows, fasta_name, generated_at, has_gff) for s in samples]
 
-    # Phase 1: HTML (parallel — image encoding is the heavy part)
     if ncpu > 1 and len(samples) > 1:
         print(f"Rendering HTML ({len(samples)} samples, {ncpu} workers)…", file=sys.stderr)
         with Pool(processes=ncpu) as pool:
@@ -1254,44 +1489,50 @@ def build_report(samples, data_dir, out_dir, max_vcf_rows, gff_path=None, ncpu=1
         results = list(tqdm((_render_worker(t) for t in tasks),
                             total=len(tasks), desc="HTML", unit="sample", file=sys.stderr))
 
-    # Phase 2: write HTML pages
     for sample_dir, html, _ in results:
         sid = re.sub(r"[^a-zA-Z0-9_-]", "_", sample_dir.name)
         (out_dir / f"{sid}.html").write_text(_wrap(html, samples, sid), encoding="utf-8")
 
-    # Phase 3: stream VCF → JSON; extract GFF features per VCF range (serial, O(1) RAM)
+        sample_out = out_dir / sample_dir.name
+        sample_out.mkdir(exist_ok=True)
+        for view_dir in ["nucleotide_view", "genome_overview"]:
+            src = sample_dir / view_dir
+            if src.is_dir():
+                dst = sample_out / view_dir
+                if not dst.exists():
+                    try: dst.symlink_to(src.resolve())
+                    except Exception: pass
+    
     all_metas = [(sd, m) for sd, _, metas in results for m in metas]
-    if all_metas:
+    if all_metas and not skip_json:
         print(f"\nStreaming {len(all_metas)} VCF(s) → JSON…", file=sys.stderr)
         for sample_dir, (vcf_path, jsid, col_headers, snames, csq_fmt, ann_fmt) in \
                 tqdm(all_metas, desc="VCF→JSON", unit="vcf", file=sys.stderr):
             json_path = out_dir / f"{jsid}.json"
             try:
-                n = write_variant_json(vcf_path, json_path, col_headers, snames,
+                n, _ = write_variant_json(vcf_path, json_path, col_headers, snames,
                                        csq_fmt, ann_fmt, max_vcf_rows)
                 print(f"  {vcf_path.name}: {n} variants → {json_path.name}", file=sys.stderr)
             except Exception as e:
                 print(f"  [WARN] {vcf_path.name}: {e}", file=sys.stderr)
                 continue
 
-            # GFF extraction scoped to this VCF's coordinate range
             if has_gff:
                 coord_ranges = get_vcf_coord_range(json_path)
                 all_features = []
                 for chrom, (start, end) in coord_ranges.items():
-                    pad = max(5000, (end - start) // 10)  # 10% padding
+                    pad = max(5000, (end - start) // 10)
                     feats = extract_gff_features(gff_path, chrom, max(1, start-pad), end+pad)
                     all_features.extend(feats)
                 feat_path = out_dir / f"{jsid}_features.json"
                 feat_path.write_text(json.dumps(all_features, separators=(',',':')),
                                      encoding="utf-8")
-                print(f"  GFF: {len(all_features)} features → {feat_path.name}", file=sys.stderr)
+    elif skip_json:
+        print("\n[INFO] --skip-json active: Bypassing variant JSON conversion and GFF compilation.", file=sys.stderr)
 
-    # Index page
     idx_body = render_index(samples, data_dir, generated_at)
     sb       = _sidebar_items(samples)
 
-    # Optional index.md — rendered above the sample table
     changelog_html = ""
     changelog_path = data_dir / "index.md"
     if changelog_path.exists():
@@ -1325,7 +1566,7 @@ def build_report(samples, data_dir, out_dir, max_vcf_rows, gff_path=None, ncpu=1
 <script>{JS}</script></body></html>"""
     (out_dir / "index.html").write_text(idx_page, encoding="utf-8")
 
-    total_mb = sum(f.stat().st_size for f in out_dir.iterdir()) / 1e6
+    total_mb = sum(f.stat().st_size for f in out_dir.iterdir() if f.is_file()) / 1e6
     print(f"\nDone → {out_dir}/  ({total_mb:.1f} MB total)", file=sys.stderr)
 
 
@@ -1334,17 +1575,36 @@ def main():
     data_dir = Path(args.data)
     out_dir  = Path(args.output_dir)
     gff_path = Path(args.gff) if args.gff else None
+    fasta_path = Path(args.fasta) if args.fasta else None
+    
     if not data_dir.exists():
         print(f"[ERROR] '{data_dir}' not found.", file=sys.stderr); sys.exit(1)
     if gff_path and not gff_path.exists():
         print(f"[WARN] GFF not found: {gff_path} — continuing without GFF track.", file=sys.stderr)
         gff_path = None
+    if fasta_path:
+        if not fasta_path.exists():
+            print(f"[WARN] FASTA not found: {fasta_path}. IGV track may fail.", file=sys.stderr)
+            fasta_path = None
+        else:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            link_target = out_dir / fasta_path.name
+            if not link_target.exists():
+                try:
+                    link_target.symlink_to(fasta_path.resolve())
+                    fai_path = Path(str(fasta_path) + ".fai")
+                    if fai_path.exists():
+                        (out_dir / fai_path.name).symlink_to(fai_path.resolve())
+                except Exception as e:
+                    print(f"[WARN] Failed to symlink FASTA: {e}", file=sys.stderr)
+
     samples = discover_samples(data_dir)
     if not samples:
         print("[WARN] No sample directories found.", file=sys.stderr)
     print(f"Found {len(samples)} sample(s) in '{data_dir}'", file=sys.stderr)
+    
     build_report(samples, data_dir, out_dir, args.max_vcf_rows,
-                 gff_path=gff_path, ncpu=args.ncpu)
+                 gff_path=gff_path, fasta_name=fasta_path.name if fasta_path else None, skip_json=args.skip_json, ncpu=args.ncpu)
 
 if __name__ == "__main__":
     main()
