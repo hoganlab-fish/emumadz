@@ -209,10 +209,7 @@ def read_vcf_header(vcf_path: Path):
 def stream_rows(vcf_path, col_headers, sample_names, csq_fmt, ann_fmt, max_rows=0):
     if not vcf_path.exists() or not col_headers: return
     raw_all = col_headers[9:]
-    idx = {}
-    for s in sample_names:
-        try: idx[s] = raw_all.index(s)
-        except ValueError: pass
+    idx = {s: raw_all.index(s) for s in sample_names if s in raw_all}
     n = 0
     try:
         with _opener(vcf_path)(vcf_path,"rt",errors="replace") as fh:
@@ -222,13 +219,13 @@ def stream_rows(vcf_path, col_headers, sample_names, csq_fmt, ann_fmt, max_rows=
                 parts = line.split("\t")
                 if len(parts)<8: continue
                 chrom,pos,_,ref,alt,qual,filt,info_str = parts[:8]
+                scols = parts[9:] if len(parts)>9 else []
                 
-                # FIX: Truncate row split strictly to match headers
-                scols = parts[9:11] if len(parts)>9 else []
-
+                info = _parse_info(info_str)
+                info_dp = info.get("DP", "0") # Extract global Depth
+                
                 format_col = parts[8].split(":") if len(parts) > 8 else []
-                try: dp_idx = format_col.index("DP")
-                except ValueError: dp_idx = -1
+                dp_idx = format_col.index("DP") if "DP" in format_col else -1
 
                 gt = {}
                 for s,ci in idx.items():
@@ -240,42 +237,42 @@ def stream_rows(vcf_path, col_headers, sample_names, csq_fmt, ann_fmt, max_rows=
                     else:
                         gt[s] = "./. (?x)"
                 
-                info = _parse_info(info_str)
-                vep = []
+                vep, ann = [], []
                 if csq_fmt and "CSQ" in info:
                     for blk in info["CSQ"].split(","):
                         vs=blk.split("|"); vep.append({f:(vs[j] if j<len(vs) else "") for j,f in enumerate(csq_fmt)})
-                ann = []
                 if ann_fmt and "ANN" in info:
                     for blk in info["ANN"].split(","):
                         vs=blk.split("|"); ann.append({f:(vs[j] if j<len(vs) else "") for j,f in enumerate(ann_fmt)})
+                
                 vi = _best(vep,"IMPACT").get("IMPACT","") if vep else ""
                 ai = _best(ann,"Annotation_Impact").get("Annotation_Impact","") if ann else ""
                 impact = min(vi,ai,key=lambda x:IMPACT_ORDER.get(x,4)) if (vi or ai) else ""
+                
                 yield {"chrom":chrom,"pos":pos,"ref":ref,"alt":alt,"qual":qual,"filter":filt,
-                       "vep":vep,"ann":ann,"lof":info.get("LOF",""),"nmd":info.get("NMD",""),
-                       "impact":impact,"samples":gt}
+                       "info_dp": info_dp, "vep":vep,"ann":ann,"lof":info.get("LOF",""),
+                       "nmd":info.get("NMD",""),"impact":impact,"samples":gt}
                 n+=1
                 if max_rows and n>=max_rows: return
     except Exception as e:
         print(f"  [WARN] parse error {vcf_path.name}: {e}", file=sys.stderr)
 
-def write_variant_json(vcf_path, json_path, col_headers, sample_names,
-                       csq_fmt, ann_fmt, max_rows=0):
-    SCALAR = ["chrom","pos","ref","alt","qual","filter","impact","lof","nmd",
+
+def write_variant_json(vcf_path, json_path, col_headers, sample_names, csq_fmt, ann_fmt, max_rows=0):
+    SCALAR = ["chrom","pos","ref","alt","qual","filter","info_dp","impact","lof","nmd",
               "vep_symbol","vep_consequence","vep_hgvsc","vep_hgvsp",
               "vep_aa","vep_biotype","vep_class",
               "ann_gene","ann_annotation","ann_hgvsc","ann_hgvsp","ann_biotype",
               "vep_n","ann_n"]
     all_fields = SCALAR + [f"s:{s}" for s in sample_names]
     n = 0
-    coord_ranges = {}
+    coord_ranges = {} 
     with open(json_path,"w",encoding="utf-8") as out:
         out.write('{"fields":'); out.write(json.dumps(all_fields,separators=(',',':'))); out.write(',"rows":[')
         for v in stream_rows(vcf_path,col_headers,sample_names,csq_fmt,ann_fmt,max_rows):
-            vb = _best(v["vep"],"IMPACT")            if v["vep"] else {}
+            vb = _best(v["vep"],"IMPACT") if v["vep"] else {}
             ab = _best(v["ann"],"Annotation_Impact") if v["ann"] else {}
-            row = [v["chrom"],v["pos"],v["ref"],v["alt"],v["qual"],v["filter"],v["impact"],
+            row = [v["chrom"],v["pos"],v["ref"],v["alt"],v["qual"],v["filter"],v.get("info_dp","0"),v["impact"],
                    bool(v["lof"]),bool(v["nmd"]),
                    vb.get("SYMBOL",""),vb.get("Consequence",""),vb.get("HGVSc",""),
                    vb.get("HGVSp",""),vb.get("Amino_acids",""),vb.get("BIOTYPE",""),vb.get("VARIANT_CLASS",""),
@@ -287,15 +284,12 @@ def write_variant_json(vcf_path, json_path, col_headers, sample_names,
             out.write(json.dumps(row,separators=(',',':')))
             n += 1
             try:
-                pos = int(v["pos"])
-                c   = v["chrom"]
-                if c not in coord_ranges:
-                    coord_ranges[c] = [pos, pos]
+                pos, c = int(v["pos"]), v["chrom"]
+                if c not in coord_ranges: coord_ranges[c] = [pos, pos]
                 else:
                     if pos < coord_ranges[c][0]: coord_ranges[c][0] = pos
                     if pos > coord_ranges[c][1]: coord_ranges[c][1] = pos
-            except (ValueError, TypeError):
-                pass
+            except: pass
         out.write("]}")
     return n, {c: (r[0], r[1]) for c, r in coord_ranges.items()}
 
@@ -334,38 +328,6 @@ def get_bam_locus(bam_path: Path) -> str:
         first_pos = int(view_res.stdout.splitlines()[0].split("\t")[3])
         return f"{best_chrom}:{max(1, first_pos - 2000)}-{first_pos + 2000}"
     except Exception: return "all"
-
-def build_igv_config(sample_dir: Path, fasta_name: str = None) -> str:
-    tracks = []
-    prefix = sample_dir.name
-    
-    go_dir = sample_dir / "genome_overview"
-    if go_dir.is_dir():
-        for f in sorted(go_dir.iterdir()):
-            if f.suffix in [".tdf", ".bedgraph", ".bw"]:
-                fmt = "tdf" if f.suffix == ".tdf" else "bedgraph"
-                tracks.append({"name": f.name, "url": f"{prefix}/genome_overview/{f.name}", "type": "wig", "format": fmt, "order": 10})
-
-    nt_dir = sample_dir / "nucleotide_view"
-    if nt_dir.is_dir():
-        for sub in ["mut", "wt", "sib"]:
-            sub_dir = nt_dir / sub
-            if sub_dir.is_dir():
-                for f in sorted(sub_dir.iterdir()):
-                    if f.suffix == ".bam":
-                        order = 50 if sub == "mut" else 60
-                        tracks.append({"name": f"{sub.upper()}: {f.name}", "url": f"{prefix}/nucleotide_view/{sub}/{f.name}", "indexURL": f"{prefix}/nucleotide_view/{sub}/{f.name}.bai", "format": "bam", "type": "alignment", "order": order})
-
-    if not tracks: return ""
-    locus = "all"
-    first_bam = next((sample_dir.parent / t["url"] for t in tracks if t["format"] == "bam"), None)
-    if first_bam and first_bam.exists(): locus = get_bam_locus(first_bam)
-    
-    config = {"locus": locus, "tracks": tracks}
-    if fasta_name: config["reference"] = {"id": "danRer7_local", "name": "Zebrafish (danRer7)", "fastaURL": fasta_name, "indexURL": f"{fasta_name}.fai"}
-    else: config["reference"] = {"id": "danRer7_ucsc", "name": "Zebrafish (danRer7)", "fastaURL": "https://hgdownload.soe.ucsc.edu/goldenPath/danRer7/bigZips/danRer7.fa.gz", "indexURL": "https://hgdownload.soe.ucsc.edu/goldenPath/danRer7/bigZips/danRer7.fa.gz.fai"}
-    return json.dumps(config)
-
 
 # ── CSS / JS (shared) ─────────────────────────────────────────────────────────
 
@@ -432,6 +394,34 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 .section-body.open{display:block}
 .count{color:var(--muted);font-size:.85em;font-weight:400}
 .muted{color:var(--muted);font-style:italic;font-size:13px}
+
+
+/* show help icons */
+.th-wrap { 
+  display: flex; 
+  align-items: center; 
+  gap: 6px; 
+  position: relative; 
+}
+.tt-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 50%; background: #34495e;
+  color: #ffffff; font-size: 10px; cursor: help; position: relative;
+  font-family: sans-serif; font-weight: bold;
+}
+/* Drop tooltips downwards so they never clip out of frame */
+.tt-icon::after {
+  content: attr(data-tt); position: absolute; 
+  top: 140%; left: 50%; transform: translateX(-50%);
+  background: #2c3e50; color: #ffffff; padding: 8px 12px; 
+  border: 1px solid #3498db; border-radius: 4px; font-size: 11px; 
+  white-space: normal; width: max-content; max-width: 160px;
+  z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
+  text-transform: none; font-weight: normal; opacity: 0; 
+  pointer-events: none; transition: opacity 0.15s;
+}
+.tt-icon:hover::after { opacity: 1; }
+
 /* gallery */
 .gallery{display:flex;flex-wrap:wrap;gap:.75rem}
 .img-figure{background:var(--surf2);border:1px solid var(--brd);border-radius:var(--r);
@@ -526,6 +516,28 @@ const _posIndex = {};   // jsid → {chrom: [[pos, rowIdx], ...]} sorted by pos
 const _viewMode = {};   // jsid → 'window' | 'all'
 const _currentIndices = {}; // jsid -> array of currently rendered rows
 const _sortState = {};
+
+// Global memory caches to preserve sort and triage states between redraws
+window.sortStates = {};
+window.triageRegistry = {};
+
+function setTriageState(jsid, rowIdx, action) {
+    const rowEl = document.getElementById(`vrow-${jsid}-${rowIdx}`);
+    const key = `${jsid}_${rowIdx}`;
+    
+    if (!window.triageRegistry[jsid]) window.triageRegistry[jsid] = {};
+
+    if (window.triageRegistry[jsid][rowIdx] === action) {
+        // Toggle off if clicking the same action button again
+        delete window.triageRegistry[jsid][rowIdx];
+        if (rowEl) rowEl.className = 'var-row';
+    } else {
+        window.triageRegistry[jsid][rowIdx] = action;
+        if (rowEl) {
+            rowEl.className = `var-row ${action === 'save' ? 'saved' : 'discarded'}`;
+        }
+    }
+}
 
 // ── lightbox ──────────────────────────────────────────────────────────────
 function openLightbox(fig){
@@ -634,139 +646,197 @@ function exportCartCSV(jsid) {
 
 // ── row building ──────────────────────────────────────────────────────────
 function makeRow(data, rowIdx, gi, F, jsid){
-  const r=data.rows[rowIdx];
-  const imp=r[F.impact]||'';
-  const lof=r[F.lof]?'<span class="lof-tag">LOF</span>':'';
-  const nmd=r[F.nmd]?'<span class="nmd-tag">NMD</span>':'';
-  const gtC=gi.map(ci=>`<td class="gt" title="Genotype: ${esc(r[ci])}">${esc(r[ci]||'./.')}</td>`).join('');
-  const tr=document.createElement('tr');
-  const rowId = 'vrow-'+jsid+'-'+rowIdx;
+  const r = data.rows[rowIdx];
+  const imp = r[F.impact] || '';
+  const lof = r[F.lof] ? '<span class="lof-tag">LOF</span>' : '';
+  const nmd = r[F.nmd] ? '<span class="nmd-tag">NMD</span>' : '';
+  
+  // Format sample columns to explicitly show reads
+  const gtC = gi.map(ci => {
+      const val = String(r[ci] || './. (?x)');
+      const match = val.match(/^(.+?)\s*\((.*?)\)$/);
+      if (match) {
+          return `<td class="gt" style="white-space:nowrap;"><strong>${esc(match[1])}</strong> <span style="color:var(--muted); font-size:10px; margin-left:6px; background:rgba(255,255,255,0.05); padding:2px 4px; border-radius:3px;">Reads: ${esc(match[2].replace('x',''))}</span></td>`;
+      }
+      return `<td class="gt">${esc(val)}</td>`;
+  }).join('');
+  
+  const tr = document.createElement('tr');
+  const rowId = `vrow-${jsid}-${rowIdx}`;
   
   const cart = JSON.parse(localStorage.getItem('cart_'+jsid) || '{}');
   const initialClass = cart[rowId] ? ' ' + cart[rowId] : '';
   
-  tr.className='var-row' + initialClass;
-  tr.id=rowId;
-  tr.dataset.impact=imp;
-  tr.dataset.pos=r[F.pos]||'';
-  tr.dataset.chrom=r[F.chrom]||'';
-  tr.dataset.text=[r[F.vep_symbol],r[F.vep_consequence],r[F.vep_hgvsc],
-                   r[F.ann_gene],r[F.ann_annotation],r[F.chrom]].join(' ').toLowerCase();
+  tr.className = 'var-row' + initialClass;
+  tr.id = rowId;
+  tr.dataset.impact = imp;
+  tr.dataset.pos = r[F.pos] || '';
+  tr.dataset.chrom = r[F.chrom] || '';
+  tr.dataset.text = [r[F.vep_symbol], r[F.vep_consequence], r[F.vep_hgvsc],
+                     r[F.ann_gene], r[F.ann_annotation], r[F.chrom]].join(' ').toLowerCase();
 
-  // Mathematical Segregation & Depth check logic embedded in the row
-  let mutHits = 0, sibHits = 0, mutTotal = 0, sibTotal = 0;
+  let mutHits = 0, mutTotal = 0, sibHits = 0, sibTotal = 0;
   data.fields.forEach((colName, idx) => {
-      if (colName.startsWith('s:')) {
-          const isMut = colName.toLowerCase().includes('mut');
-          const isSib = colName.toLowerCase().includes('sib') || colName.toLowerCase().includes('wt');
-          if (isMut) { mutTotal++; if (r[idx] && r[idx].includes('1/1')) mutHits++; }
-          if (isSib) { sibTotal++; if (r[idx] && r[idx].includes('1/1')) sibHits++; }
+      const lowerCol = colName.toLowerCase();
+      if (lowerCol.startsWith('s:')) {
+          if (lowerCol.includes('mut')) { mutTotal++; if (r[idx] && r[idx].includes('1/1')) mutHits++; }
+          if (lowerCol.includes('sib') || lowerCol.includes('wt')) { sibTotal++; if (r[idx] && r[idx].includes('1/1')) sibHits++; }
       }
   });
+  let segScore = mutTotal > 0 ? (mutHits / mutTotal) - (sibTotal > 0 ? (sibHits / sibTotal) : 0) : 0;
+  r._segScore = segScore;
   
-  let segScore = 0;
-  let segBadge = '<span class="badge" style="background:#6b7494;color:#fff" title="No valid samples for seg math">N/A</span>';
-  if (mutTotal > 0) {
-      segScore = (mutHits / mutTotal) - (sibTotal > 0 ? (sibHits / sibTotal) : 0);
-      r._segScore = segScore;
-      if (segScore >= 0.8) segBadge = `<span class="badge" style="background:#2ecc71;color:#fff">${segScore.toFixed(2)}</span>`;
-      else if (segScore > 0) segBadge = `<span class="badge" style="background:#f39c12;color:#fff">${segScore.toFixed(2)}</span>`;
-      else segBadge = `<span class="badge" style="background:#e74c3c;color:#fff">${segScore.toFixed(2)}</span>`;
-  }
+  let segBadge = `<span class="badge" style="background:#6b7494;color:#fff">${segScore.toFixed(2)}</span>`;
+  if (segScore >= 0.8) segBadge = `<span class="badge" style="background:#2ecc71;color:#fff">${segScore.toFixed(2)}</span>`;
+  else if (segScore > 0.4) segBadge = `<span class="badge" style="background:#f39c12;color:#fff">${segScore.toFixed(2)}</span>`;
 
-  const triageBtns = `<td style="text-align:center; border-right: 1px solid var(--brd);"><span style="cursor:pointer; margin-right:5px; font-size:14px;" title="Save" onclick="tagVariant('${jsid}', ${rowIdx}, 'saved')">🟢</span><span style="cursor:pointer; font-size:14px;" title="Discard" onclick="tagVariant('${jsid}', ${rowIdx}, 'discarded')">❌</span></td>`;
+  const triageBtns = `
+    <td style="text-align:center; white-space:nowrap; border-right: 1px solid var(--brd);" onclick="event.stopPropagation();">
+      <button onclick="tagVariant('${jsid}', ${rowIdx}, 'saved')" style="background:#2ecc71; color:white; border:none; border-radius:3px; padding:2px 6px; cursor:pointer; font-weight:bold; margin-right:2px;" title="Save">✓</button>
+      <button onclick="tagVariant('${jsid}', ${rowIdx}, 'discarded')" style="background:#e74c3c; color:white; border:none; border-radius:3px; padding:2px 6px; cursor:pointer; font-weight:bold;" title="Discard">✕</button>
+    </td>
+  `;
 
-  tr.innerHTML=
+  tr.innerHTML =
     triageBtns +
-    `<td style="text-align:center;" title="Fidelity Math: Perfect mutants minus noise siblings">${segBadge}</td>`+
-    `<td title="${esc(imp)}">${badge(imp)}${lof}${nmd}</td>`+
-    `<td title="Chromosome">${esc(r[F.chrom])}</td><td title="Position">${esc(r[F.pos])}</td>`+
-    `<td title="Reference Base">${esc(r[F.ref])}</td><td title="Alternate Base">${esc(r[F.alt])}</td>`+
-    `<td title="Phred Qual">${esc(r[F.qual])}</td><td title="Filter tag">${esc(r[F.filter])}</td>`+
-    `<td title="VEP Symbol">${esc(r[F.vep_symbol])}</td><td class="sc" title="VEP Consequence">${esc(r[F.vep_consequence])}</td>`+
-    `<td class="sc" title="HGVSc Code">${esc(r[F.vep_hgvsc])}</td><td class="sc" title="HGVSp Code">${esc(r[F.vep_hgvsp])}</td>`+
-    `<td title="Amino Acid Details">${esc(r[F.vep_aa])}</td><td class="tc" title="Transcripts affected">${r[F.vep_n]||'—'}</td>`+
-    `<td title="ANN Gene">${esc(r[F.ann_gene])}</td><td class="sc" title="ANN Annotation">${esc(r[F.ann_annotation])}</td>`+
-    `<td class="tc" title="Transcripts affected">${r[F.ann_n]||'—'}</td>${gtC}`;
-  tr.addEventListener('mouseover',()=>updateGffMarker(jsid,r[F.chrom],parseInt(r[F.pos])||0));
+    `<td style="text-align:center;">${segBadge}</td>` +
+    `<td>${badge(imp)}${lof}${nmd}</td>` +
+    `<td>${esc(r[F.chrom])}</td>` +
+    `<td>${esc(r[F.pos])}</td>` +
+    `<td>${esc(r[F.ref])}</td>` +
+    `<td>${esc(r[F.alt])}</td>` +
+    `<td><strong>${esc(r[F.info_dp] || '0')}</strong></td>` +
+    `<td>${esc(r[F.qual])}</td>` +
+    `<td>${esc(r[F.filter])}</td>` +
+    `<td>${esc(r[F.vep_symbol] || '—')}</td>` +
+    `<td class="sc">${esc(r[F.vep_consequence] || '—')}</td>` +
+    `<td class="sc">${esc(r[F.vep_hgvsc] || '—')}</td>` +
+    `<td class="sc">${esc(r[F.vep_hgvsp] || '—')}</td>` +
+    `<td>${esc(r[F.vep_aa] || '—')}</td>` +
+    `<td class="tc">${r[F.vep_n] || '—'}</td>` +
+    `<td>${esc(r[F.ann_gene] || '—')}</td>` +
+    `<td class="sc">${esc(r[F.ann_annotation] || '—')}</td>` +
+    `<td class="tc">${r[F.ann_n] || '—'}</td>` +
+    gtC;
+    
+  tr.addEventListener('click',()=>navigateToCoordinate(jsid, r[F.chrom], parseInt(r[F.pos]) || 0));
+  tr.addEventListener('mouseover',()=>updateGffMarker(jsid, r[F.chrom], parseInt(r[F.pos]) || 0));
   return tr;
 }
 
 function buildHeader(data, headId, sampleNames, jsid){
   const F={}; data.fields.forEach((f,i)=>F[f]=i);
-  const gtH = sampleNames.map(s => `<th style="cursor:pointer;" title="Genotype: ${esc(s)}. Format: Call (Depthx). Click to sort depth." onclick="sortTable('${jsid}', ${F[`s:${s}`]}, 'gt')">${esc(s)} ↕</th>`).join('');
+  
+  const tooltips = {
+      seg: "Continuous score calculating fidelity of mutants against sibling noise.",
+      impact: "Predicted molecular variant severity impact classification.",
+      chrom: "Chromosome or Contig identifier.",
+      pos: "1-based genomic coordinate position.",
+      dp: "Total sequence reads covering this variant locus site. Note: This number will not match the absolute read depth per sample. Broadly, it is a aggregate score based on multiple variables. However, it can be informative as one (of many) confidence scores.",
+      qual: "Phred-scaled base call quality configuration score.",
+      filter: "Filter status validation rule flags.",
+      gene: "Ensembl Gene Symbol mapping.",
+      cons: "Primary VEP structural consequence array map.",
+      ann_gene: "SnpEff Gene Symbol.",
+      ann_cons: "Primary SnpEff annotation."
+  };
 
-  document.getElementById(headId).innerHTML=
-    `<tr><th style="width:70px;text-align:center;" title="Curate variants">Triage</th>`+
-    `<th style="cursor:pointer;" title="Continuous 0-1 score comparing Mutants vs Siblings" onclick="sortTable('${jsid}', 'seg', 'num')">Seg ↕</th>`+
-    `<th style="cursor:pointer;" title="Variant Impact" onclick="sortTable('${jsid}', ${F.impact}, 'impact')">Impact ↕</th>`+
-    `<th style="cursor:pointer;" title="Chromosome" onclick="sortTable('${jsid}', ${F.chrom}, 'str')">Chrom ↕</th>`+
-    `<th style="cursor:pointer;" title="Position" onclick="sortTable('${jsid}', ${F.pos}, 'num')">Pos ↕</th>`+
-    `<th title="Reference">Ref</th><th title="Alternate">Alt</th>`+
-    `<th style="cursor:pointer;" title="Quality Score" onclick="sortTable('${jsid}', ${F.qual}, 'num')">Qual ↕</th>`+
-    `<th title="Filter Status">Filter</th>`+
-    `<th style="cursor:pointer;" title="VEP Symbol" onclick="sortTable('${jsid}', ${F.vep_symbol}, 'str')">VEP Sym ↕</th>`+
-    `<th title="VEP Consequence">Cons</th><th title="HGVSc">HGVSc</th><th title="HGVSp">HGVSp</th>`+
-    `<th title="Amino Acid details">AA</th><th title="VEP Overlaps">VEP tx</th>`+
-    `<th title="ANN Gene">ANN Gene</th><th title="ANN Annotation">Annotation</th><th title="ANN Overlaps">ANN tx</th>${gtH}</tr>`;
+  const makeTh = (label, sortKey, type, tooltip) => {
+      const sortAction = sortKey ? ` onclick="sortTable('${jsid}', '${sortKey}', '${type}')" style="cursor:pointer; text-decoration:underline; text-decoration-style:dotted; text-underline-offset:3px;"` : '';
+      const ttHtml = tooltip ? ` <span class="tt-icon" data-tt="${tooltip}">?</span>` : '';
+      return `<th><div class="th-wrap"><span${sortAction}>${label} ${sortKey ? '↕' : ''}</span>${ttHtml}</div></th>`;
+  };
+
+  const gtH = sampleNames.map((s, idx) => {
+      const fieldIdx = F[`s:${s}`];
+      return makeTh(`${esc(s)}`, `gt_${fieldIdx}`, 'gt', `Genotype call and local read depth for sample ${esc(s)}. This should correspond more closely to the true number of reads mapping to the region.`);
+  }).join('');
+
+  document.getElementById(headId).innerHTML = `<tr>` +
+    `<th style="width:80px; text-align:center;"><div class="th-wrap" style="justify-content:center;"><span>Triage</span><span class="tt-icon" data-tt="Tag variants for curation. Preserved on exports.">?</span></div></th>` +
+    makeTh('Seg', 'segScore', 'num', tooltips.seg) +
+    makeTh('Impact', 'impact', 'impact', tooltips.impact) +
+    makeTh('Chrom', 'chrom', 'str', tooltips.chrom) +
+    makeTh('Pos', 'pos', 'num', tooltips.pos) +
+    `<th>Ref</th><th>Alt</th>` +
+    makeTh('Depth', 'info_dp', 'num', tooltips.dp) +
+    makeTh('Qual', 'qual', 'num', tooltips.qual) +
+    `<th>Filter</th>` +
+    makeTh('VEP Sym', 'vep_symbol', 'str', tooltips.gene) +
+    makeTh('Consequence', 'vep_consequence', 'str', tooltips.cons) +
+    `<th>HGVSc</th><th>HGVSp</th><th>AA</th><th>VEP tx</th>` +
+    makeTh('ANN Gene', 'ann_gene', 'str', tooltips.ann_gene) +
+    makeTh('Annotation', 'ann_annotation', 'str', tooltips.ann_cons) +
+    `<th>ANN tx</th>` + gtH + `</tr>`;
 }
 
 // ── Core Array Sorting Engine ──────────────────────────────────────────────
-function sortTable(jsid, colIdx, type) {
+function sortTable(jsid, fieldKey, type) {
     const data = _varData[jsid];
-    const activeIndices = _currentIndices[jsid];
+    let activeIndices = _currentIndices[jsid];
     if (!data || !activeIndices) return;
 
-    _sortState[jsid] = _sortState[jsid] || { col: null, dir: 1 };
-    if (_sortState[jsid].col === colIdx) _sortState[jsid].dir *= -1;
-    else { _sortState[jsid].col = colIdx; _sortState[jsid].dir = 1; }
-    const dir = _sortState[jsid].dir;
+    _sortState[jsid] = _sortState[jsid] || { key: '', order: 'asc' };
+    const state = _sortState[jsid];
+    state.order = (state.key === fieldKey && state.order === 'asc') ? 'desc' : 'asc';
+    state.key = fieldKey;
+    const dir = state.order === 'asc' ? 1 : -1;
 
-    setStatus(jsid, 'Sorting display window...');
+    const F = {}; data.fields.forEach((f, i) => F[f] = i);
     const impactVal = {"HIGH":4, "MODERATE":3, "LOW":2, "MODIFIER":1, "":0};
 
     activeIndices.sort((idxA, idxB) => {
-        const a = data.rows[idxA]; const b = data.rows[idxB];
+        const a = data.rows[idxA];
+        const b = data.rows[idxB];
         let valA, valB;
-        if (colIdx === 'seg') { valA = a._segScore || -1; valB = b._segScore || -1; } 
-        else { valA = a[colIdx]; valB = b[colIdx]; }
 
-        if (type === 'gt') { 
-            const depthA = parseInt((String(valA||'').match(/\\((\\d+)x\\)/) || [0,0])[1]);
-            const depthB = parseInt((String(valB||'').match(/\\((\\d+)x\\)/) || [0,0])[1]);
-            return (depthB - depthA) * dir;
-        } 
-        else if (type === 'num') { return ((parseFloat(valB)||0) - (parseFloat(valA)||0)) * dir; } 
-        else if (type === 'impact') { return ((impactVal[valB||""]||0) - (impactVal[valA||""]||0)) * dir; } 
-        else {
-            const strA = String(valA||"").toLowerCase(); const strB = String(valB||"").toLowerCase();
+        if (fieldKey === 'segScore') {
+            valA = a._segScore || 0; valB = b._segScore || 0;
+        } else if (type === 'gt') {
+            const colIdx = parseInt(fieldKey.split('_')[1]);
+            valA = parseInt((String(a[colIdx]||'').match(/\((\d+)x\)/) || [0,0])[1]);
+            valB = parseInt((String(b[colIdx]||'').match(/\((\d+)x\)/) || [0,0])[1]);
+        } else {
+            valA = a[F[fieldKey]]; valB = b[F[fieldKey]];
+        }
+
+        if (type === 'num' || type === 'gt') {
+            return ((parseFloat(valA) || 0) - (parseFloat(valB) || 0)) * dir;
+        } else if (type === 'impact') {
+            return ((impactVal[valA||""]||0) - (impactVal[valB||""]||0)) * dir;
+        } else {
+            const strA = String(valA||"").toLowerCase();
+            const strB = String(valB||"").toLowerCase();
             return strA < strB ? -1 * dir : (strA > strB ? 1 * dir : 0);
         }
     });
 
-    const F={}; data.fields.forEach((f,i)=>F[f]=i);
-    const gi = window._snames[jsid].map(s=>F[`s:${s}`]);
-    const tbody = document.getElementById('tb-'+jsid);
-    tbody.innerHTML = '';
-    const frag = document.createDocumentFragment();
-    activeIndices.forEach(ri => frag.appendChild(makeRow(data, ri, gi, F, jsid)));
-    tbody.appendChild(frag);
-    runStratification(jsid);
-    setStatus(jsid, 'Sorted.');
+    const gi = (window._snames[jsid] || []).map(s => F[`s:${s}`]);
+    const tbody = document.getElementById(`tb-${jsid}`);
+    if (tbody) {
+        tbody.innerHTML = '';
+        const frag = document.createDocumentFragment();
+        activeIndices.forEach(ri => frag.appendChild(makeRow(data, ri, gi, F, jsid)));
+        tbody.appendChild(frag);
+        runStratification(jsid); // Re-apply opacities to sorted rows
+    }
 }
 
 // ── Stratification Visualizer ──────────────────────────────────────────────
 function runStratification(jsid) {
-    const mode = document.getElementById('preset-mode-' + jsid).value;
-    const minDp = parseInt(document.getElementById('min-dp-' + jsid).value, 10) || 0;
+    const modeEl = document.getElementById('preset-mode-' + jsid);
+    const mode = modeEl ? modeEl.value : 'relaxed';
+    const minDp = parseInt((document.getElementById('min-dp-' + jsid) || {}).value || '0', 10);
     const data = _varData[jsid]; if(!data) return;
-    const F = {}; data.fields.forEach((f,i)=>F[f]=i);
+    const F = {}; data.fields.forEach((f,i) => F[f] = i);
 
     const mutCols = [];
     data.fields.forEach((colName, idx) => { if (colName.toLowerCase().includes('mut')) mutCols.push(idx); });
 
     document.querySelectorAll(`#tw-${jsid} .var-row`).forEach(tr => {
+        // Skip explicitly triaged rows, force them to stay fully opaque
         if (tr.classList.contains('saved') || tr.classList.contains('discarded')) return;
+        
         const rIdx = parseInt(tr.id.split('-').pop(), 10);
         const r = data.rows[rIdx]; if(!r) return;
         
@@ -779,12 +849,15 @@ function runStratification(jsid) {
         let passDepth = true;
         if (mutCols.length > 0 && minDp > 0) {
             mutCols.forEach(idx => {
-                const match = String(r[idx]||'').match(/\\((\\d+)x\\)/);
+                const match = String(r[idx]||'').match(/\((\d+)x\)/);
                 if (match && parseInt(match[1], 10) < minDp) passDepth = false;
             });
         }
 
+        // Clean previous tiers
         tr.classList.remove('tier-1', 'tier-2', 'tier-3');
+        
+        // Force assignment
         if (mode === 'strict') {
             if (score >= 3 && passDepth) tr.classList.add('tier-1');
             else tr.classList.add('tier-3'); 
@@ -804,7 +877,7 @@ function runStratification(jsid) {
 }
 
 
-// ── windowed render (±100 rows around a position, by sorted index) ─────────
+// ── windowed render (±1000 rows around a position, by sorted index) ─────────
 function renderWindow(jsid, chrom, centerPos, sampleNames){
   const data=_varData[jsid];  if(!data) return;
   const idx=_posIndex[jsid];  if(!idx) return;
@@ -812,11 +885,11 @@ function renderWindow(jsid, chrom, centerPos, sampleNames){
   const gi=sampleNames.map(s=>F[`s:${s}`]);
   const arr=idx[chrom]||[];
   const ci=bisectLeft(arr,centerPos);
-  const lo=Math.max(0,ci-100);
-  const hi=Math.min(arr.length,ci+100);
+  const lo=Math.max(0,ci-1000);
+  const hi=Math.min(arr.length,ci+1000);
   const rowIndices=arr.slice(lo,hi).map(([,ri])=>ri);
   _viewMode[jsid]='window';
-  setStatus(jsid,`Showing ${rowIndices.length} variants around ${chrom}:${centerPos.toLocaleString()} (±100)`);
+  setStatus(jsid,`Showing ${rowIndices.length} variants around ${chrom}:${centerPos.toLocaleString()} (±1000)`);
   const tbody=document.getElementById('tb-'+jsid);
   tbody.innerHTML='';
   const frag=document.createDocumentFragment();
@@ -1008,18 +1081,24 @@ function updateGffMarker(jsid,chrom,pos){
   if(coords) coords.textContent=`${chrom}:${pos.toLocaleString()} (hover)`;
 }
 
-// Navigate to coordinate: windowed render + marker + position filter
+// Navigate to coordinate: windowed render + marker + position filter + igv sync
 function navigateToCoordinate(jsid, chrom, startPos, endPos, sampleNames){
-  // update position search box
   const posInp=document.getElementById('spos-'+jsid);
   if(posInp) posInp.value=endPos?`${chrom}:${startPos}-${endPos}`:`${chrom}:${startPos}`;
-  // windowed render around startPos
+  
   const sn=sampleNames||window._snames[jsid]||[];
   renderWindow(jsid,chrom,startPos,sn);
   updateGffMarker(jsid,chrom,startPos);
-  // sync IGV if present
-  if (window.igv && window.igv.browser) { window.igv.browser.search(`${chrom}:${Math.max(1, startPos-50)}-${startPos+50}`); }
-  // scroll first visible row into view
+  
+  // Sync back to IGV Frame (Pad by 150bp for visual context)
+  if (window.igvBrowsers && window.igvBrowsers[jsid]) {
+      window._isSyncing = true;
+      const targetStart = Math.max(1, startPos - 150);
+      const targetEnd = startPos + 150;
+      window.igvBrowsers[jsid].search(`${chrom}:${targetStart}-${targetEnd}`)
+          .finally(() => { window._isSyncing = false; });
+  }
+
   setTimeout(()=>{
     const first=document.querySelector('#tw-'+jsid+' .var-row:not([style*="none"])');
     if(first) first.scrollIntoView({behavior:'smooth',block:'center'});
@@ -1142,7 +1221,7 @@ def get_bam_locus(bam_path: Path) -> str:
         return f"{best_chrom}:{max(1, first_pos - 2000)}-{first_pos + 2000}"
     except Exception: return "all"
 
-def build_igv_config(sample_dir: Path, fasta_name: str = None) -> str:
+def build_igv_config(sample_dir: Path, fasta_name: str = None, gff_name: str = None) -> str:
     tracks = []
     prefix = sample_dir.name
     
@@ -1163,10 +1242,24 @@ def build_igv_config(sample_dir: Path, fasta_name: str = None) -> str:
                         order = 50 if sub == "mut" else 60
                         tracks.append({"name": f"Reads ({sub.upper()}): {f.name}", "url": f"{prefix}/nucleotide_view/{sub}/{f.name}", "indexURL": f"{prefix}/nucleotide_view/{sub}/{f.name}.bai", "format": "bam", "type": "alignment", "order": order})
 
+    if gff_name:
+        is_gz = gff_name.endswith('.gz')
+        tracks.append({
+            "name": "Custom Annotations",
+            "type": "annotation",
+            "format": "gtf" if "gtf" in gff_name.lower() else "gff3",
+            "url": gff_name,
+            "indexURL": f"{gff_name}.tbi" if is_gz else None,
+            "displayMode": "EXPANDED",
+            "color": "#3498db",
+            "height": 120,
+            "visibilityWindow": 1000000
+        })
+
     if not tracks: return ""
     locus = "all"
     first_bam = next((sample_dir.parent / t["url"] for t in tracks if t["format"] == "bam"), None)
-    if first_bam and first_bam.exists(): locus = get_bam_locus(first_bam)
+    if first_bam and first_bam.exists(): locus = get_bam_locus(first_bam)     
     
     config = {"locus": locus, "tracks": tracks}
     if fasta_name: config["reference"] = {"id": "danRer7_local", "name": "Zebrafish (danRer7)", "fastaURL": fasta_name, "indexURL": f"{fasta_name}.fai"}
@@ -1175,7 +1268,7 @@ def build_igv_config(sample_dir: Path, fasta_name: str = None) -> str:
 
 # ── VCF section HTML (inline on sample page, non-collapsible) ─────────────────
 
-def _vcf_section_html(vcf_path, jsid, max_vcf_rows, fasta_name, has_gff: bool):
+def _vcf_section_html(vcf_path, jsid, max_vcf_rows, fasta_name, gff_name, has_gff: bool):
     """Return HTML for one VCF block (non-collapsible, inline variant table)."""
     _, col_headers, sample_names, csq_fmt, ann_fmt = read_vcf_header(vcf_path)
     no_vep = '' if csq_fmt else '<p class="muted" style="margin:.2rem 0;font-size:11px">No VEP/CSQ annotations in this VCF.</p>'
@@ -1189,24 +1282,44 @@ def _vcf_section_html(vcf_path, jsid, max_vcf_rows, fasta_name, has_gff: bool):
     tbl_wrap_id  = f"tw-{jsid}"
 
     sample_dir = vcf_path.parent
-    igv_config_json = build_igv_config(sample_dir, fasta_name)
+    igv_config_json = build_igv_config(sample_dir, fasta_name, gff_name)
     igv_html = f"""
-    <div id="igv-container-{jsid}" style="margin: 1rem 0; border: 1px solid var(--brd); border-radius: var(--r);"></div>
+    <div id="igv-container-{jsid}" style="margin: 1rem 0; border: 1px solid var(--brd); border-radius: var(--r); background: #ffffff; color: #111111; padding: 5px;"></div>
     <script>
       document.addEventListener("DOMContentLoaded", function() {{
-          renderIGV('{jsid}', '{igv_config_json}');
+          if (typeof igv !== 'undefined') {{
+              window.igvBrowsers = window.igvBrowsers || {{}};
+              igv.createBrowser(document.getElementById('igv-container-{jsid}'), {igv_config_json})
+                 .then(function(b) {{
+                     window.igvBrowsers['{jsid}'] = b;
+                     // Sync IGV locus panning back to the custom GFF readout
+                     b.on('locuschange', function(ref) {{
+                         if (window._isSyncing) return;
+                         window._isSyncing = true;
+                         const f = Array.isArray(ref) ? ref[0] : ref;
+                         if (f) {{
+                             const c = document.getElementById('gff-coords-{jsid}');
+                             if (c) c.textContent = `${{f.chr}}:${{Math.floor(f.start)}}-${{Math.ceil(f.end)}}`;
+                         }}
+                         window._isSyncing = false;
+                     }});
+                 }});
+          }}
       }});
     </script>
     """ if igv_config_json else ""
 
     gff_track_html = f"""
-    <div id="gff-wrap-{jsid}" style="display:none">
-      <div class="gff-sticky" id="gff-sticky-{jsid}">
-        <div class="gff-header">
-          <span class="gff-title">GFF track (USE THIS FOR PRIMARY NAVIGATION)</span>
-          <span class="gff-coords" id="gff-coords-{jsid}"></span>
+    <div id="gff-wrap-{jsid}" style="display:none; margin: .5rem 0;">
+      <div class="gff-sticky" id="gff-sticky-{jsid}" style="border: 1px solid var(--brd); border-radius: var(--r); background: var(--surf); padding: .75rem;">
+        <div class="gff-header" style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: .4rem;">
+          <div class="th-wrap">
+            <span class="gff-title" style="font-weight: bold; color: var(--acc);">INTERACTIVE GFF TRACK</span>
+            <span class="tt-icon" data-tt="Interactive coordinate map. Click coloured blocks or ticks to jump the view to that locus and populate the table below with variants in that region. Hover over upper blue boxes for gene details. Red/orange/lower blue/lower grey regions correspond to predicted variant impacts of High/Moderate/Low/Modifier respectively. Note that two separate variant prediction algorithms are used, and while variant impact predictions are often in concordance, we display the highest impact call in cases of disagreement.">?</span>
+          </div>
+          <span class="gff-coords" id="gff-coords-{jsid}" style="font-family: var(--mono); color: var(--txt-muted);"></span>
         </div>
-        <svg id="gff-svg-{jsid}" class="gff-svg" width="100%" height="80"></svg>
+        <svg id="gff-svg-{jsid}" class="gff-svg" width="100%" height="80" style="background: var(--bg); display: block; overflow: visible;"></svg>
       </div>
     </div>""" if has_gff else ''
 
@@ -1224,31 +1337,41 @@ def _vcf_section_html(vcf_path, jsid, max_vcf_rows, fasta_name, has_gff: bool):
     </button>
   </div>
 
-  <div class="filter-bar" id="fbar-{jsid}">
-    <div style="display:flex; align-items:center; gap: 10px; flex-wrap:wrap;">
-        <strong style="color:var(--txt);">Presets:</strong>
-        <select id="preset-mode-{jsid}" class="search-box" style="width: auto;" onchange="runStratification('{jsid}')">
-            <option value="strict">Strict (High/Mod + Perfect Segregation)</option>
-            <option value="relaxed" selected>Relaxed (Opacity Scaling)</option>
-            <option value="segregation">Segregation Fidelity Only</option>
-        </select>
-        <label style="color:var(--txt); margin-left:10px;">Min Depth:
-            <input type="number" id="min-dp-{jsid}" value="0" class="search-box" style="width: 60px; margin-left: 5px;" onchange="runStratification('{jsid}')">
-        </label>
+<div class="filter-bar" id="fbar-{jsid}" style="display: flex; flex-direction: column; gap: 10px;">
+    <div style="display:flex; align-items:center; gap: 15px; flex-wrap:wrap;">
+        <div style="display: inline-flex; align-items: center; gap: 6px; font-weight: bold; font-size: 12px; color: var(--txt);">
+            <span>Preset Mode</span>
+            <span class="tt-icon" data-tt="Toggles strictness tiers. 'Strict' requires high impact & passing depth. 'Segregation' prioritizes mutant vs. sibling ratio.">?</span>
+            <select id="preset-mode-{jsid}" class="search-box" onchange="runStratification('{jsid}')" style="margin-left: 4px; padding: 2px 4px; width: auto;">
+                <option value="relaxed">Relaxed</option>
+                <option value="strict">Strict</option>
+                <option value="segregation">Segregation</option>
+            </select>
+        </div>
+
+        <div style="display: inline-flex; align-items: center; gap: 6px; font-weight: bold; font-size: 12px; color: var(--txt);">
+            <span>Min Depth</span>
+            <span class="tt-icon" data-tt="Hides variants where the Local Read Depth for the mutant samples falls below this threshold.">?</span>
+            <input type="number" id="min-dp-{jsid}" value="0" min="0" class="search-box" onchange="runStratification('{jsid}')" style="margin-left: 4px; width: 60px; padding: 2px;">
+        </div>
     </div>
-    <div style="display:flex; align-items:center; gap: 10px; margin-top:5px; flex-wrap:wrap;">
-        <span style="color:var(--txt); font-weight:600;">Filter:</span>
+
+    <div style="display:flex; align-items:center; gap: 10px; flex-wrap:wrap;">
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: bold; font-size: 12px; color: var(--txt);">
+            Filter
+            <span class="tt-icon" data-tt="Regex/Text search. Filters by Gene Name, Consequence, or Chromosome.">?</span>
+        </span>
         <button class="f-btn active" onclick="filterImpact(this,'ALL','{tbl_wrap_id}','{jsid}')">All</button>
         <button class="f-btn" onclick="filterImpact(this,'HIGH','{tbl_wrap_id}','{jsid}')">HIGH</button>
         <button class="f-btn" onclick="filterImpact(this,'MODERATE','{tbl_wrap_id}','{jsid}')">MODERATE</button>
         <button class="f-btn" onclick="filterImpact(this,'LOW','{tbl_wrap_id}','{jsid}')">LOW</button>
         <button class="f-btn" onclick="filterImpact(this,'MODIFIER','{tbl_wrap_id}','{jsid}')">MODIFIER</button>
-        <input class="search-box" id="sterm-{jsid}" type="text" placeholder="Search gene / consequence…" oninput="applyFilters('{tbl_wrap_id}','{jsid}'); runStratification('{jsid}');" style="width:200px">
+        <input class="search-box" id="sterm-{jsid}" type="text" placeholder="Search gene / consequence…" oninput="applyFilters('{tbl_wrap_id}','{jsid}'); window.runStratification && runStratification('{jsid}');" style="width:200px">
         <input class="search-box" id="spos-{jsid}" type="text" placeholder="Pos range e.g. chr13:335-337" oninput="applyFilters('{tbl_wrap_id}','{jsid}')" style="width:200px">
     </div>
   </div>
   <p>
-    The coordinate and search gene functionality work within the scope of the selected interactive region <b>only</b>.
+    The coordinate and search gene functionality work <b><i>within the scope of the selected interactive region only</i></b>. Click column headers to sort, and mouse over question marks for helptext. Opacity is automatically imposed on low-scoring variants, but all are shown for transparency. You can "freeze" specific variants of interest in the triage tab and export a file compatible with excel, if desired. Selecting a region on either the IGV browser or Interactive GFF Track will update the table, and propagate the coordinate of interest across other tracks. Click <b>Load variants</b> below to proceed. (Variants are not automatically loaded as this can be a heavy operation.)
   </p>
   
   <div id="vload-{jsid}" style="margin-bottom:.75rem">
@@ -1327,7 +1450,7 @@ def _vcf_section_html(vcf_path, jsid, max_vcf_rows, fasta_name, has_gff: bool):
   </script>
 </div>"""
 
-def render_sample_page(sample_dir: Path, max_vcf_rows: int, fasta_name: str,
+def render_sample_page(sample_dir: Path, max_vcf_rows: int, fasta_name: str, gff_name: str,
                        index_url="index.html", generated_at="", has_gff=False):
     name = sample_dir.name
     fm, md_html = parse_md(sample_dir / "sample.md")
@@ -1350,7 +1473,7 @@ def render_sample_page(sample_dir: Path, max_vcf_rows: int, fasta_name: str,
         for vcf_path in vcfs:
             jsid = re.sub(r"[^a-zA-Z0-9_]", "_",
                           f"{sid}__{vcf_path.stem.replace('.vcf','')}")
-            vcf_blocks_html += _vcf_section_html(vcf_path, jsid, max_vcf_rows, fasta_name, has_gff)
+            vcf_blocks_html += _vcf_section_html(vcf_path, jsid, max_vcf_rows, fasta_name, gff_name, has_gff)
             _, col_headers, snames, csq_fmt, ann_fmt = read_vcf_header(vcf_path)
             if col_headers:
                 vcf_metas.append((vcf_path, jsid, col_headers, snames, csq_fmt, ann_fmt))
@@ -1469,8 +1592,8 @@ def _wrap(raw, samples, current_sid):
                .replace("{SIDEBAR_ITEMS}", _sidebar_items(samples, current_sid)))
 
 def _render_worker(args):
-    sample_dir, max_vcf_rows, fasta_name, generated_at, has_gff = args
-    html, vcf_metas = render_sample_page(sample_dir, max_vcf_rows, fasta_name,
+    sample_dir, max_vcf_rows, fasta_name, gff_name, generated_at, has_gff = args
+    html, vcf_metas = render_sample_page(sample_dir, max_vcf_rows, fasta_name, gff_name,
                                           generated_at=generated_at, has_gff=has_gff)
     return sample_dir, html, vcf_metas
 
@@ -1478,7 +1601,8 @@ def build_report(samples, data_dir, out_dir, max_vcf_rows, gff_path=None, fasta_
     out_dir.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     has_gff = gff_path is not None and gff_path.exists()
-    tasks = [(s, max_vcf_rows, fasta_name, generated_at, has_gff) for s in samples]
+    gff_name = gff_path.name if has_gff else None
+    tasks = [(s, max_vcf_rows, fasta_name, gff_name, generated_at, has_gff) for s in samples]
 
     if ncpu > 1 and len(samples) > 1:
         print(f"Rendering HTML ({len(samples)} samples, {ncpu} workers)…", file=sys.stderr)
@@ -1598,7 +1722,49 @@ def main():
                 except Exception as e:
                     print(f"[WARN] Failed to symlink FASTA: {e}", file=sys.stderr)
 
+    if gff_path and gff_path.exists():
+        out_dir.mkdir(parents=True, exist_ok=True)
+        link_target = out_dir / gff_path.name
+        if not link_target.exists():
+            try:
+                link_target.symlink_to(gff_path.resolve())
+                # Expose tabix index to IGV if it exists
+                for ext in [".tbi", ".csi"]:
+                    idx_path = Path(str(gff_path) + ext)
+                    if not idx_path.exists():
+                        idx_path = gff_path.with_suffix(gff_path.suffix + ext)
+                    if idx_path.exists():
+                        (out_dir / idx_path.name).symlink_to(idx_path.resolve())
+            except Exception as e:
+                print(f"[WARN] Failed to symlink GFF: {e}", file=sys.stderr)
+
     samples = discover_samples(data_dir)
+    for sample_id in samples:
+        # Assuming BAM files live in data_dir/sample_id/sample_id.bam
+        sample_dir = data_dir / sample_id
+        bam_candidate = sample_dir / f"{sample_id}.bam"
+        
+        if bam_candidate.exists():
+            # Create a dedicated web-accessible data directory inside report/
+            web_sample_dir = out_dir / "data" / sample_id
+            web_sample_dir.mkdir(parents=True, exist_ok=True)
+            
+            target_bam = web_sample_dir / f"{sample_id}.bam"
+            target_bai = web_sample_dir / f"{sample_id}.bam.bai"
+            
+            try:
+                if not target_bam.exists():
+                    target_bam.symlink_to(bam_candidate.resolve())
+                
+                # Check for standard .bam.bai or .bai variants
+                source_bai = Path(str(bam_candidate) + ".bai")
+                if not source_bai.exists():
+                    source_bai = bam_candidate.with_suffix(".bai")
+                    
+                if source_bai.exists() and not target_bai.exists():
+                    target_bai.symlink_to(source_bai.resolve())
+            except Exception as e:
+                print(f"[WARN] Failed to symlink alignment tracks for {sample_id}: {e}", file=sys.stderr)    
     if not samples:
         print("[WARN] No sample directories found.", file=sys.stderr)
     print(f"Found {len(samples)} sample(s) in '{data_dir}'", file=sys.stderr)
