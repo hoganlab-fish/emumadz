@@ -39,7 +39,7 @@ authors:
   orcid: "https://orcid.org/0000-0002-0651-7065"     
 
 title: "EMUMADZ"
-version: 1.0.1
-doi: 10.5281/zenodo.17810567
-date-released: 2025-12-4
+version: 1.1.1
+doi: 10.5281/zenodo.17810566
+date-released: 2026-06-29
 url: "https://github.com/hoganlab-fish/emumadz"
