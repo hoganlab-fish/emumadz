@@ -197,6 +197,9 @@ Run the following, specifying the path to your output directory, in this case ``
 
 Open ``localhost:8000`` in a web browser of choice to view the interactive report.
 
+.. caution::
+    This is insecure and should be used with caution if hosted remotely on a web server. Standard cybersecurity measures should be present, but details are beyond the scope of this document.
+
 Detailed information
 ++++++++++++++++++++
 
