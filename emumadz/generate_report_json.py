@@ -509,7 +509,7 @@ hr{border:none;border-top:1px solid var(--brd);margin:1rem 0}
   background:var(--surf);border:1px solid var(--brd);padding:.3rem .6rem;border-radius:var(--r);opacity:.7}
 """
 
-JS = """
+JS = r"""
 // ── global state ──────────────────────────────────────────────────────────
 const _varData  = {};   // jsid → parsed data object
 const _posIndex = {};   // jsid → {chrom: [[pos, rowIdx], ...]} sorted by pos
