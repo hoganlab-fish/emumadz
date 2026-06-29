@@ -1,5 +1,7 @@
 cff-version: 1.2.0
+title: "EMUMADZ"
 message: "If you use this software, please cite it as below."
+type: software
 authors:
 - family-names: "Chen"
   given-names: "Tyrone"
@@ -37,9 +39,7 @@ authors:
 - family-names: "Hogan"
   given-names: "Benjamin"
   orcid: "https://orcid.org/0000-0002-0651-7065"     
-
-title: "EMUMADZ"
+url: "https://doi.org/10.5281/zenodo.17810566"
+license: MIT
 version: 1.1.1
-doi: 10.5281/zenodo.17810566
 date-released: 2026-06-29
-url: "https://github.com/hoganlab-fish/emumadz"
