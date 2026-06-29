@@ -69,6 +69,7 @@ Contains the documentation for our custom zebrafish whole genome sequencing pipe
    case_study_1
    case_study_2
    case_study_3
+   visualisation_module
    api
 
 Appendix
